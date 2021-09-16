@@ -39,6 +39,7 @@ UpnpInterface.prototype.onVolumioStart = function () {
     socket.on('data', function (msg) {
       var message = msg.toString();
       // console.log('Upnp client: '+message );
+      //self.logger.info('Upnp client: ' + message);
       if (message.indexOf('addid') !== -1) {
         self.logger.info('Starting UPNP Playback');
         self.prepareUpnpPlayback();
@@ -67,6 +68,7 @@ UpnpInterface.prototype.onVolumioStart = function () {
     serviceSocket.connect(parseInt(remoteport), remoteaddr, function () {
     });
     serviceSocket.on('data', function (data) {
+      //self.logger.info('Upnp client data: ' + data);
       socket.write(data);
     });
 
