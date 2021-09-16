@@ -704,7 +704,7 @@ ControllerMpd.prototype.mpdEstablish = function () {
           return self.logDone(timeStart);
         });
     } else {
-      self.logger.info('Ignoring MPD Status Update');
+      self.logger.info("Ignoring MPD Status Update during 'system'. ingnoreupdate = " + ignoreupdate + status);
     }
   });
 
@@ -719,7 +719,7 @@ ControllerMpd.prototype.mpdEstablish = function () {
           return self.logDone(timeStart);
         });
     } else {
-      self.logger.info('Ignoring MPD Status Update');
+      self.logger.info("Ignoring MPD Status Update during 'system-playlist'. ingnoreupdate = " + ignoreupdate);
     }
   });
 
@@ -743,7 +743,7 @@ ControllerMpd.prototype.mpdEstablish = function () {
           return self.commandRouter.fileUpdate(state.updatedb);
         });
     } else {
-      self.logger.info('Ignoring MPD Status Update');
+      self.logger.info("Ignoring MPD Status Update during 'system-update'. ingnoreupdate = " + ignoreupdate);
     }
   });
 };
