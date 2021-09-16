@@ -362,6 +362,23 @@ ControllerMpd.prototype.sendMpdCommandArray = function (arrayCommands) {
     .then(libMpd.parseKeyValueMessage.bind(libMpd));
 };
 
+ControllerMpd.prototype.setMpdTrackMetaData = function (data) {
+  var self = this;
+  
+  return self.sendMpdCommand('status', [])
+    .then(function (objState) {
+        //var collectedState = self.parseState(objState);
+        // If there is a track listed as currently playing, get the track info
+        // if (collectedState.position !== null)
+        self.logger.info("Mpd state: "+JSON.stringify(objState));
+        //if ('songid' in objState) 
+        //{
+            self.logger.info("Setting mpd metadata for songid " + objState.songid + " tag: " + data.tag + ", value: " + data.value);
+            self.sendMpdCommand('addtagid', [objState.songid, data.tag, data.value]);
+        //}
+    })
+};
+
 // Parse MPD's track info text into Volumio recognizable object
 ControllerMpd.prototype.parseTrackInfo = function (objTrackInfo) {
   var self = this;
@@ -704,7 +721,7 @@ ControllerMpd.prototype.mpdEstablish = function () {
           return self.logDone(timeStart);
         });
     } else {
-      self.logger.info("Ignoring MPD Status Update during 'system'. ingnoreupdate = " + ignoreupdate + status);
+      self.logger.info("Ignoring MPD Status Update on 'system'. ignoreupdate = " + ignoreupdate + ", status: " + status);
     }
   });
 
