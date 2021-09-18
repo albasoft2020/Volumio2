@@ -374,8 +374,14 @@ ControllerMpd.prototype.setMpdTrackMetaData = function (data) {
         //if ('songid' in objState) 
         //{
         //    self.logger.info("Setting mpd metadata for songid " + objState.songid + " tag: " + data.tag + ", value: " + data.value);
-        self.sendMpdCommand('cleartagid', [objState.songid, "Title"]);
-        data.forEach(entry => self.sendMpdCommand('addtagid', [objState.songid, entry.tag, entry.value]));
+        let CommandArray = [];
+        data.forEach(entry =>
+        {
+            CommandArray.push({command: 'cleartagid', parameters: [objState.songid, entry.tag]});
+            CommandArray.push({command: 'addtagid',   parameters: [objState.songid, entry.tag, entry.value]});            
+        });
+        self.sendMpdCommandArray(CommandArray);
+        //data.forEach(entry => self.sendMpdCommand('addtagid', [objState.songid, entry.tag, entry.value]));
         //}
     })
 };
