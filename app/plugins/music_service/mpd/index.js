@@ -370,11 +370,12 @@ ControllerMpd.prototype.setMpdTrackMetaData = function (data) {
         //var collectedState = self.parseState(objState);
         // If there is a track listed as currently playing, get the track info
         // if (collectedState.position !== null)
-        self.logger.info("Mpd state: "+JSON.stringify(objState));
+        self.logger.info("Mpd state: "+JSON.stringify(objState) + ", data: "+JSON.stringify(data));
         //if ('songid' in objState) 
         //{
-            self.logger.info("Setting mpd metadata for songid " + objState.songid + " tag: " + data.tag + ", value: " + data.value);
-            self.sendMpdCommand('addtagid', [objState.songid, data.tag, data.value]);
+        //    self.logger.info("Setting mpd metadata for songid " + objState.songid + " tag: " + data.tag + ", value: " + data.value);
+        self.sendMpdCommand('cleartagid', [objState.songid, "Title"]);
+        data.forEach(entry => self.sendMpdCommand('addtagid', [objState.songid, entry.tag, entry.value]));
         //}
     })
 };
