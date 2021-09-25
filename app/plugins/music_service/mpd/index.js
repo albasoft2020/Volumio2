@@ -354,7 +354,7 @@ ControllerMpd.prototype.sendMpdCommandArray = function (arrayCommands) {
     .then(function () {
       return libQ.nfcall(self.clientMpd.sendCommands.bind(self.clientMpd),
         libFast.map(arrayCommands, function (currentCommand) {
-          self.logger.verbose('MPD COMMAND ' + currentCommand);
+          self.logger.verbose('MPD COMMAND ' + JSON.stringify(currentCommand));
           return libMpd.cmd(currentCommand.command, currentCommand.parameters);
         })
       );
@@ -367,23 +367,18 @@ ControllerMpd.prototype.setMpdTrackMetaData = function (data) {
   
   return self.sendMpdCommand('status', [])
     .then(function (objState) {
-        //var collectedState = self.parseState(objState);
-        // If there is a track listed as currently playing, get the track info
-        // if (collectedState.position !== null)
         self.logger.info("Mpd state: "+JSON.stringify(objState) + ", data: "+JSON.stringify(data));
-        //if ('songid' in objState) 
-        //{
-        //    self.logger.info("Setting mpd metadata for songid " + objState.songid + " tag: " + data.tag + ", value: " + data.value);
-        let CommandArray = [];
-        data.forEach(entry =>
+        if ('songid' in objState) 
         {
-            CommandArray.push({command: 'cleartagid', parameters: [objState.songid, entry.tag]});
-            CommandArray.push({command: 'addtagid',   parameters: [objState.songid, entry.tag, entry.value]});            
-        });
-        self.sendMpdCommandArray(CommandArray);
-        //data.forEach(entry => self.sendMpdCommand('addtagid', [objState.songid, entry.tag, entry.value]));
-        //}
-    })
+            let CommandArray = [];
+            data.forEach(entry =>
+            {
+                CommandArray.push({command: 'cleartagid', parameters: [objState.songid, entry.tag]});
+                CommandArray.push({command: 'addtagid',   parameters: [objState.songid, entry.tag, entry.value]});            
+            });
+            self.sendMpdCommandArray(CommandArray);
+        }
+    });
 };
 
 // Parse MPD's track info text into Volumio recognizable object
