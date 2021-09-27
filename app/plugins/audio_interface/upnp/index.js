@@ -32,14 +32,19 @@ UpnpInterface.prototype.onVolumioStart = function () {
   var localport = 6599;
   var remoteport = 6600;
   var remoteaddr = '127.0.0.1';
+  
+  // need helper routines to emulate mpd behaviour
+  self.helper = require('../../user_interface/mpdemulation/helper.js');
+  self.request = '';
 
   self.server = net.createServer(function (socket) {
     socket.setEncoding('utf8');
 
     socket.on('data', function (msg) {
       var message = msg.toString();
+      self.request = message;
       // console.log('Upnp client: '+message );
-      //self.logger.info('Upnp client: ' + message);
+      self.logger.info('Upnp client: ' + message);
       if (message.indexOf('addid') !== -1) {
         self.logger.info('Starting UPNP Playback');
         self.prepareUpnpPlayback();
@@ -49,6 +54,13 @@ UpnpInterface.prototype.onVolumioStart = function () {
         }, 500);
       } else if (message.indexOf('clear') !== -1) {
         self.clearQueue();
+        setTimeout(function () {
+          serviceSocket.write(msg);
+        }, 300);
+      } else if (message.indexOf('currentsong') !== -1) {
+//          var dummy = 'file: http://127.0.0.1:9790/minimserver/*/INTERNAL/Music/FLAC-CD/Kokoroko/KOKOROKO*20-*20KOKOROKO/KOKOROKO*20-*20KOKOROKO*20-*2003*20Uman.flac \nTitle: Uman \nArtist: KOKOROKO \nPos: 0 \nId: 82 \nOK\n';
+//          self.logger.info('Returning dummy var in response to currentsong: ' + dummy);
+//          socket.write(dummy);
         setTimeout(function () {
           serviceSocket.write(msg);
         }, 300);
@@ -68,7 +80,7 @@ UpnpInterface.prototype.onVolumioStart = function () {
     serviceSocket.connect(parseInt(remoteport), remoteaddr, function () {
     });
     serviceSocket.on('data', function (data) {
-      //self.logger.info('Upnp client data: ' + data);
+      self.logger.info('Upnp client: reply to ' + self.request + '\n' + data);
       socket.write(data);
     });
 
