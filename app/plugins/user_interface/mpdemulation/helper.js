@@ -138,13 +138,13 @@ var stats = { // DUMMY FOR NOW!
 };
 
 var status = { // default format, fill with real data
-  volume: 0,
+  volume: 100,
   repeat: 0,
   random: 0,
   single: 0,
   consume: 0,
   playlist: 0,
-  playlistlength: 0,
+  playlistlength: 1,
   mixrampdb: 0.0,
   state: 'pause',
   song: 0,
@@ -248,10 +248,39 @@ module.exports = {
     status.state = message.status;	// playstate
     status.song = message.position; // song nr in playlist
     // message.dynamictitle unhandled
-    status.elapsed = message.seek; // time elapsed
-    status.time = message.duration; // song time
-    status.audio = message.samplerate + ':' + message.bitdepth + ':' + message.channels; // (44000:24:2) default
+    status.elapsed = message.seek/1000; // time elapsed
+    status.time = Math.round(status.elapsed) + ':' + message.duration; // song time
+    let sr = '', bd = '';
+    if (message.samplerate) sr = message.samplerate.split(" ")[0]*1000;  //sample rate in Hz
+    if (message.bitdepth) bd = message.bitdepth.split(" ")[0];
+    status.audio = sr + ':' + bd + ':' + message.channels; // (44000:24:2) default
     // message.service unhandled
+
+    // Return a resolved empty promise to represent completion
+    return libQ.resolve();
+  },
+  
+    // Set the Status
+  copyStatus: function (message) {
+    // copy values
+    status.volume = message.volume;
+    status.repeat = message.repeat;
+    status.single = message.single;
+    status.consume = message.consume;
+    status.playlist = message.playlist;
+    status.playlistlength = message.playlistlength;
+    status.mixrampdb = message.mixrampdb;
+
+    status.state = message.state;	// playstate
+    status.song = message.song; // song nr in playlist
+    status.elapsed = message.elapsed; // time elapsed
+    status.time = Math.round(status.elapsed) + ':' + message.time.split(':')[1]; // song time
+    status.songid = message.songid;
+    status.bitrate = message.bitrate;
+    status.audio = message.audio; // (44000:24:2) default
+    // message.service unhandled
+    //  nextsong: 0,
+    //  nextsongid: 0
 
     // Return a resolved empty promise to represent completion
     return libQ.resolve();

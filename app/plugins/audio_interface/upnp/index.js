@@ -36,6 +36,13 @@ UpnpInterface.prototype.onVolumioStart = function () {
   // need helper routines to emulate mpd behaviour
   self.helper = require('../../user_interface/mpdemulation/helper.js');
   self.request = '';
+  self.no = 0;
+  //self.song = {file: ''};
+  self.songStr = '';
+  self.statusStr = 'OK ';
+  self.playlistStr = 'OK ';
+  self.Duration = 0;
+  self.TimeOffset = 0;
 
   self.server = net.createServer(function (socket) {
     socket.setEncoding('utf8');
@@ -80,7 +87,9 @@ UpnpInterface.prototype.onVolumioStart = function () {
     serviceSocket.connect(parseInt(remoteport), remoteaddr, function () {
     });
     serviceSocket.on('data', function (data) {
-      self.logger.info('Upnp client: reply to ' + self.request + '\n' + data);
+      //self.logger.info('Upnp client: reply to ' + self.request + '\n' + data);
+      //self.logger.info('Upnp client: ' + JSON.stringify(parseKeyValueMessage(data.toString())));
+      checkresponse(data);
       socket.write(data);
     });
 
@@ -93,8 +102,56 @@ UpnpInterface.prototype.onVolumioStart = function () {
   } catch (e) {
     self.logger.error('Failed listening to UPNP Port: ' + e);
   }
-
-  return libQ.resolve();
+    function checkresponse(data){
+        let resp = data.toString();
+        let tmp = {};
+   //     self.logger.info('Upnp client: checking response...');
+        self.no++;
+        if (resp.startsWith('changed')){
+            self.changes = resp;
+            self.logger.info('Upnp client: idle returned: ' + resp)
+        } else if (self.request.startsWith('status')){
+           self.statusStr = resp;
+        } else if (self.request.startsWith('currentsong')){
+            if (resp.startsWith('file') && (self.songStr != resp)) {
+                self.songStr = resp;
+                let state = parseKeyValueMessage(self.statusStr);
+                if ('time' in state) {
+                        let arrayTimeData = state.time.split(':');
+                        self.Duration = Math.round(Number(arrayTimeData[1]));
+                        if (!self.Duration) {
+                            self.TimeOffset = state.elapsed;
+                        } else self.TimeOffset = 0;
+                }
+            self.logger.info('Upnp client: song changed! ');  
+//          self.logger.info('Upnp client: return song: ' + JSON.stringify(self.songinfo));
+            }   
+        } else if (self.request.startsWith('playlist')){
+            if (self.request.length < 14) self.playlistStr = resp;
+//         self.logger.info('Upnp client: return song: ' + JSON.stringify(self.songinfo));
+        } else {
+            self.logger.info('Upnp client: reply to ' + self.request + '\n' + data);
+        }
+        if (self.no % 20 == 0) {
+            self.logger.info('Upnp client: number of requests: ' + self.no);
+            if (self.statusStr) self.logger.info('Upnp client: status ' + JSON.stringify(parseKeyValueMessage(self.statusStr)));
+            if (self.songStr) self.logger.info('Upnp client: song ' + JSON.stringify(parseKeyValueMessage(self.songStr)) + ' with Offset: ' + self.TimeOffset);
+            if (self.playlistStr) self.logger.info('Upnp client: Playlist ' + self.playlistStr);      
+//            let volumioState = self.commandRouter.volumioGetState();
+//            if (volumioState){
+//                volumioState.seek -= self.TimeOffset*1000;
+//                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus(volumioState));
+//            }
+            let volumioState = parseKeyValueMessage(self.statusStr);
+            if (volumioState){
+                volumioState.elapsed -= self.TimeOffset;
+                self.helper.copyStatus(volumioState);
+                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus());
+            }
+        }
+    };
+  
+    return libQ.resolve();
 };
 
 UpnpInterface.prototype.onPlayerNameChanged = function (playerName) {
@@ -306,4 +363,27 @@ UpnpInterface.prototype.clearQueue = function () {
   setTimeout(() => {
     this.commandRouter.stateMachine.clearQueue();
   }, 300);
+};
+
+function parseKeyValueMessage (msg) {
+  var result = {};
+
+  msg.split('\n').forEach(function (p) {
+    if (p.length === 0) {
+      return result;
+    }
+    if (p.indexOf('OK') !== -1) {  // ignore this line and return result so far as this should be the last line of response
+       return result;
+    }
+    if (p.indexOf('ACK') !== -1) {  // error 
+        result[keyValue[1]] = p;
+       return result;
+    }
+    var keyValue = p.match(/([^ ]+): (.*)/);
+    if (keyValue == null) {
+      throw new Error('Could not parse entry "' + p + '"');
+    }
+    result[keyValue[1]] = keyValue[2];
+  });
+  return result;
 };
