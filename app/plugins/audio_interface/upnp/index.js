@@ -41,7 +41,7 @@ UpnpInterface.prototype.onVolumioStart = function () {
   self.songStr = '';
   self.statusStr = 'OK ';
   self.playlistStr = 'OK ';
-  self.Duration = 0;
+  self.duration = 0;
   self.TimeOffset = 0;
 
   self.server = net.createServer(function (socket) {
@@ -118,8 +118,8 @@ UpnpInterface.prototype.onVolumioStart = function () {
                 let state = parseKeyValueMessage(self.statusStr);
                 if ('time' in state) {
                         let arrayTimeData = state.time.split(':');
-                        self.Duration = Math.round(Number(arrayTimeData[1]));
-                        if (!self.Duration) {
+                        self.duration = Math.round(Number(arrayTimeData[1]));
+                        if (!self.duration) {
                             self.TimeOffset = state.elapsed;
                         } else self.TimeOffset = 0;
                 }
@@ -137,15 +137,15 @@ UpnpInterface.prototype.onVolumioStart = function () {
             if (self.statusStr) self.logger.info('Upnp client: status ' + JSON.stringify(parseKeyValueMessage(self.statusStr)));
             if (self.songStr) self.logger.info('Upnp client: song ' + JSON.stringify(parseKeyValueMessage(self.songStr)) + ' with Offset: ' + self.TimeOffset);
             if (self.playlistStr) self.logger.info('Upnp client: Playlist ' + self.playlistStr);      
-//            let volumioState = self.commandRouter.volumioGetState();
-//            if (volumioState){
+            let volumioState = self.commandRouter.volumioGetState();
+            if (volumioState){
+                self.duration = volumioState.duration;
 //                volumioState.seek -= self.TimeOffset*1000;
 //                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus(volumioState));
-//            }
-            let volumioState = parseKeyValueMessage(self.statusStr);
-            if (volumioState){
-                volumioState.elapsed -= self.TimeOffset;
-                self.helper.copyStatus(volumioState);
+            }
+            let mpdState = parseKeyValueMessage(self.statusStr);
+            if (mpdState){
+                self.helper.copyStatus(mpdState, self.TimeOffset, self.duration);
                 self.logger.info('Upnp client: Fake state ' + self.helper.printStatus());
             }
         }

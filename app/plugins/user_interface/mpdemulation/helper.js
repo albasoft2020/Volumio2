@@ -260,25 +260,38 @@ module.exports = {
     return libQ.resolve();
   },
   
-    // Set the Status
-  copyStatus: function (message) {
+    // Set the Status by copying status and possibly adjusting for offset and updating duraton
+  copyStatus: function (message, offset, duration) {
     // copy values
-    status.volume = message.volume;
-    status.repeat = message.repeat;
-    status.single = message.single;
-    status.consume = message.consume;
-    status.playlist = message.playlist;
-    status.playlistlength = message.playlistlength;
-    status.mixrampdb = message.mixrampdb;
-
-    status.state = message.state;	// playstate
-    status.song = message.song; // song nr in playlist
-    status.elapsed = message.elapsed; // time elapsed
-    status.time = Math.round(status.elapsed) + ':' + message.time.split(':')[1]; // song time
-    status.songid = message.songid;
-    status.bitrate = message.bitrate;
-    status.audio = message.audio; // (44000:24:2) default
-    // message.service unhandled
+    status = Object.assign({}, message);
+    if (offset || duration){
+        if (offset) status.elapsed -= offset;
+        let nDur = 0;
+        if (duration) {
+            status.duration = duration;
+            nDur = Math.round(duration);
+        } else {
+            if (status.time) nDur = status.time.split(':')[1];
+        }
+        status.time = Math.round(status.elapsed) + ':' + nDur;
+    }
+//    status.volume = message.volume;
+//    status.repeat = message.repeat;
+//    status.random = message.random;
+//    status.single = message.single;
+//    status.consume = message.consume;
+//    status.playlist = message.playlist;
+//    status.playlistlength = message.playlistlength;
+//    status.mixrampdb = message.mixrampdb;
+//    status.state = message.state;	// playstate
+//    status.song = message.song; // song nr in playlist
+//    status.elapsed = message.elapsed; // time elapsed
+//    status.duration = message.duration; // track duration
+//    //status.time = Math.round(status.elapsed) + ':' + message.time.split(':')[1]; // song time
+//    status.songid = message.songid;
+//    status.bitrate = message.bitrate;
+//    status.audio = message.audio; // (44000:24:2) default
+//    // message.service unhandled
     //  nextsong: 0,
     //  nextsongid: 0
 
