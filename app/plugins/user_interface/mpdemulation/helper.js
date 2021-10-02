@@ -265,7 +265,7 @@ module.exports = {
     // copy values
     status = Object.assign({}, message);
     if (offset || duration){
-        if (offset) status.elapsed -= offset;
+        if (offset) status.elapsed = Math.round((status.elapsed-offset)*1000)/1000;
         let nDur = 0;
         if (duration) {
             status.duration = duration;

@@ -9,6 +9,9 @@ var net = require('net');
 var mpdPort = 6599;
 var mpdAddress = '0.0.0.0';
 var server;
+
+const okay_response = 'OK\n';
+
 // Define the UpnpInterface class
 module.exports = UpnpInterface;
 
@@ -39,19 +42,21 @@ UpnpInterface.prototype.onVolumioStart = function () {
   self.no = 0;
   //self.song = {file: ''};
   self.songStr = '';
-  self.statusStr = 'OK ';
-  self.playlistStr = 'OK ';
+  self.statusStr = okay_response;
+  self.playlistStr = okay_response;
   self.duration = 0;
   self.TimeOffset = 0;
 
   self.server = net.createServer(function (socket) {
     socket.setEncoding('utf8');
+    const ignoredCmds = ['status', 'currentsong']
 
     socket.on('data', function (msg) {
       var message = msg.toString();
-      self.request = message;
+      if (message) self.request = message.trim();
       // console.log('Upnp client: '+message );
-      self.logger.info('Upnp client: ' + message);
+      if (!ignoredCmds.includes(self.request)) self.logger.info('Upnp client: ' + self.request + '---');
+      
       if (message.indexOf('addid') !== -1) {
         self.logger.info('Starting UPNP Playback');
         self.prepareUpnpPlayback();
@@ -89,8 +94,8 @@ UpnpInterface.prototype.onVolumioStart = function () {
     serviceSocket.on('data', function (data) {
       //self.logger.info('Upnp client: reply to ' + self.request + '\n' + data);
       //self.logger.info('Upnp client: ' + JSON.stringify(parseKeyValueMessage(data.toString())));
-      checkresponse(data);
-      socket.write(data);
+      //checkresponse(data);
+      socket.write(checkresponse(data));
     });
 
     serviceSocket.on('error', function (error) {
@@ -111,7 +116,15 @@ UpnpInterface.prototype.onVolumioStart = function () {
             self.changes = resp;
             self.logger.info('Upnp client: idle returned: ' + resp)
         } else if (self.request.startsWith('status')){
-           self.statusStr = resp;
+            if (resp.startsWith('volume:')) {
+                self.statusStr = resp;
+                let mpdState = parseKeyValueMessage(self.statusStr);
+                if (mpdState){
+                    self.helper.copyStatus(mpdState, self.TimeOffset, self.duration);
+                    //if (self.no % 10 == 0) self.logger.info('Upnp client: Fake state ' + self.helper.printStatus()+ okay_response);
+                    resp = self.helper.printStatus() + okay_response;
+                }
+            }
         } else if (self.request.startsWith('currentsong')){
             if (resp.startsWith('file') && (self.songStr != resp)) {
                 self.songStr = resp;
@@ -123,32 +136,40 @@ UpnpInterface.prototype.onVolumioStart = function () {
                             self.TimeOffset = state.elapsed;
                         } else self.TimeOffset = 0;
                 }
-            self.logger.info('Upnp client: song changed! ');  
-//          self.logger.info('Upnp client: return song: ' + JSON.stringify(self.songinfo));
+                self.logger.info('Upnp client: song changed! ');  
+                // Check Volumio State as well
+                let volumioState = self.commandRouter.volumioGetState();
+                if (volumioState){
+                    self.duration = volumioState.duration;
+    //                volumioState.seek -= self.TimeOffset*1000;
+    //                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus(volumioState));
+                }
+                if (self.songStr) self.logger.info('Upnp client: song ' + JSON.stringify(parseKeyValueMessage(self.songStr)) + ' with Offset: ' + self.TimeOffset);
             }   
         } else if (self.request.startsWith('playlist')){
             if (self.request.length < 14) self.playlistStr = resp;
 //         self.logger.info('Upnp client: return song: ' + JSON.stringify(self.songinfo));
         } else {
-            self.logger.info('Upnp client: reply to ' + self.request + '\n' + data);
+//            self.logger.info('Upnp client: reply to ' + self.request + '\n' + data);
         }
-        if (self.no % 20 == 0) {
-            self.logger.info('Upnp client: number of requests: ' + self.no);
-            if (self.statusStr) self.logger.info('Upnp client: status ' + JSON.stringify(parseKeyValueMessage(self.statusStr)));
-            if (self.songStr) self.logger.info('Upnp client: song ' + JSON.stringify(parseKeyValueMessage(self.songStr)) + ' with Offset: ' + self.TimeOffset);
-            if (self.playlistStr) self.logger.info('Upnp client: Playlist ' + self.playlistStr);      
-            let volumioState = self.commandRouter.volumioGetState();
-            if (volumioState){
-                self.duration = volumioState.duration;
-//                volumioState.seek -= self.TimeOffset*1000;
-//                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus(volumioState));
-            }
-            let mpdState = parseKeyValueMessage(self.statusStr);
-            if (mpdState){
-                self.helper.copyStatus(mpdState, self.TimeOffset, self.duration);
-                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus());
-            }
-        }
+//        if (self.no % 20 == 0) {
+//            self.logger.info('Upnp client: number of requests: ' + self.no);
+//            if (self.statusStr) self.logger.info('Upnp client: status ' + JSON.stringify(parseKeyValueMessage(self.statusStr)));
+//            if (self.songStr) self.logger.info('Upnp client: song ' + JSON.stringify(parseKeyValueMessage(self.songStr)) + ' with Offset: ' + self.TimeOffset);
+////            if (self.playlistStr) self.logger.info('Upnp client: Playlist ' + self.playlistStr);      
+//            let volumioState = self.commandRouter.volumioGetState();
+//            if (volumioState){
+//                self.duration = volumioState.duration;
+////                volumioState.seek -= self.TimeOffset*1000;
+////                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus(volumioState));
+//            }
+//            let mpdState = parseKeyValueMessage(self.statusStr);
+//            if (mpdState){
+//                self.helper.copyStatus(mpdState, self.TimeOffset, self.duration);
+//                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus()+ okay_response);
+//            }
+//        }
+        return resp;
     };
   
     return libQ.resolve();
