@@ -175,6 +175,14 @@ var playlistId = { // DUMMY FOR NOW!
   'Id': 9
 };
 
+var currentSong = {
+    "file":"",
+    "Artist":"",
+    "Title":"",
+    "Pos":"4",
+    "Id":"26"
+}
+
 var queue = []; // hold playlistFiles (given by commandRouter)
 
 // ======================= START OF MODULE EXPORT
@@ -238,6 +246,15 @@ module.exports = {
   printStats: function () {
     return printArray(stats);
   },
+  
+   // Give MPD output of status
+  printSong: function (vState) {
+    if (vState) {
+      this.setSong(vState);
+    }
+
+    return printArray(currentSong);
+  },
   // END OF TOOLS
 
   // ======================== SETTERS (called from outside)
@@ -298,7 +315,26 @@ module.exports = {
     // Return a resolved empty promise to represent completion
     return libQ.resolve();
   },
+  // Set the Song from Volumio state
+  setSong: function (vState) {
+    // copy values
+    if (vState.artist) currentSong.Artist = vState.artist;
+    if (vState.title) currentSong.Title = vState.title;
+    if (vState.position) currentSong.Pos = vState.position;
+    if (vState.album) currentSong.Album = vState.album;
+    // Return a resolved empty promise to represent completion
+    return libQ.resolve();
+  },
+  
+    // Set the current song by copying mpd song
+  copySong: function (mpdSong) {
+    // copy values
+    currentSong = Object.assign({}, mpdSong);
 
+    // Return a resolved empty promise to represent completion
+    return libQ.resolve();
+  },
+  
   // Set the queue
   setQueue: function (newQueue) {
     queue = [];

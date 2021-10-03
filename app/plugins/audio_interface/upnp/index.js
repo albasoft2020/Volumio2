@@ -46,10 +46,11 @@ UpnpInterface.prototype.onVolumioStart = function () {
   self.playlistStr = okay_response;
   self.duration = 0;
   self.TimeOffset = 0;
+  self.idling = false;
 
   self.server = net.createServer(function (socket) {
     socket.setEncoding('utf8');
-    const ignoredCmds = ['status', 'currentsong']
+    const ignoredCmds = ['status', 'currentsong'];
 
     socket.on('data', function (msg) {
       var message = msg.toString();
@@ -77,6 +78,8 @@ UpnpInterface.prototype.onVolumioStart = function () {
           serviceSocket.write(msg);
         }, 300);
       } else {
+          if (message.indexOf('idle') !== -1) self.idling = true;
+          if (message.indexOf('noidle') !== -1) self.idling = false;
         try {
           serviceSocket.write(msg);
         } catch (e) {
@@ -113,8 +116,12 @@ UpnpInterface.prototype.onVolumioStart = function () {
    //     self.logger.info('Upnp client: checking response...');
         self.no++;
         if (resp.startsWith('changed')){
-            self.changes = resp;
-            self.logger.info('Upnp client: idle returned: ' + resp)
+            if (self.idling){
+                self.changes = resp;
+                self.idling = false;
+                if ((resp.indexOf('player') === -1) && (resp.indexOf('playlist') !== -1)) resp = 'changed: playlist\nchanged: player' + okay_response;  // add player
+            };
+            self.logger.info('Upnp client: idle returned:\n' + self.changes);
         } else if (self.request.startsWith('status')){
             if (resp.startsWith('volume:')) {
                 self.statusStr = resp;
@@ -136,11 +143,18 @@ UpnpInterface.prototype.onVolumioStart = function () {
                             self.TimeOffset = state.elapsed;
                         } else self.TimeOffset = 0;
                 }
-                self.logger.info('Upnp client: song changed! ');  
+                self.helper.copySong(parseKeyValueMessage(resp));
+                self.logger.info('Upnp client: song changed! Idling? ' + self.idling);  
+                if (self.idling) {
+                    resp += 'changed: playlist\nchanged: player' + okay_response;
+                    self.idling = false;
+                }
                 // Check Volumio State as well
                 let volumioState = self.commandRouter.volumioGetState();
                 if (volumioState){
                     self.duration = volumioState.duration;
+                    self.helper.setSong(volumioState);
+                    self.logger.info('Upnp client: updated song\n' + self.helper.printSong()); 
     //                volumioState.seek -= self.TimeOffset*1000;
     //                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus(volumioState));
                 }
