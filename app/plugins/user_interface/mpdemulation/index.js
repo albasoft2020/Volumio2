@@ -302,6 +302,8 @@ InterfaceMPD.prototype.handleCrossfade = function (sCommand, sParam, client) {
 
 // Handler for command: CURRENTSONG
 InterfaceMPD.prototype.handleCurrentsong = function (sCommand, sParam, client) {
+    var self = this;
+  self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::CurrentSong info requested with sParam ' + sParam);
   // Respond with default 'OK'
   client.write(okay_response);
 };
@@ -833,7 +835,7 @@ InterfaceMPD.prototype.handleStatus = function (sCommand, sParam, client) {
     });
 
   // Respond with default 'OK'
-  client.write(okay_response);
+  //client.write(okay_response);
 };
 
 // Handler for command: STOP
@@ -998,11 +1000,12 @@ InterfaceMPD.prototype.pushQueue = function (queue) {
 // Receive player state updates from commandRouter and broadcast to all connected clients
 InterfaceMPD.prototype.pushState = function (state, socket) {
   var self = this;
-  self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::pushState');
+  //self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::pushState to socket ' + JSON.stringify(socket) );
+  self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::pushState ' + JSON.stringify(state) );
 
   // if requested by client, respond
   if (socket) {
-    socket.write(self.helper.printStatus(state));
+    socket.write(self.helper.printStatus(state) + okay_response);
     // else broadcast to all idlers
   } else {
     // pass state to the helper
@@ -1010,7 +1013,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
 
     // broadcast state changed to all idlers
     self.idles.forEach(function (client) {
-      client.write('changed: player\n');
+      client.write('changed: player\n' + okay_response);
     });
   }
   // TODO q-stuff
