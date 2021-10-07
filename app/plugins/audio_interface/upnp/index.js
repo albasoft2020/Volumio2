@@ -7,8 +7,6 @@ var ifconfig = require('/volumio/app/plugins/system_controller/network/lib/ifcon
 var libQ = require('kew');
 var net = require('net');
 var mpdPort = 6599;
-var mpdAddress = '0.0.0.0';
-var server;
 
 const okay_response = 'OK\n';
 
@@ -41,9 +39,9 @@ UpnpInterface.prototype.onVolumioStart = function () {
   self.request = '';
   self.no = 0;
   //self.song = {file: ''};
-  self.songStr = '';
-  self.statusStr = okay_response;
-  self.playlistStr = okay_response;
+  self.songStr = ''; // string variable to keep mpd currentsong
+  self.statusStr = okay_response;   // string variable to keep mpd status
+  self.playlistStr = okay_response; // string variable to keep mpd playlist
   self.duration = 0;
   self.TimeOffset = 0;
   self.idling = false;
@@ -51,12 +49,13 @@ UpnpInterface.prototype.onVolumioStart = function () {
   self.server = net.createServer(function (socket) {
     socket.setEncoding('utf8');
     const ignoredCmds = ['status', 'currentsong'];
+    const mpdServices = ['mpd','webradio'];
 
     socket.on('data', function (msg) {
       var message = msg.toString();
       if (message) self.request = message.trim();
       // console.log('Upnp client: '+message );
-      if (!ignoredCmds.includes(self.request)) self.logger.info('Upnp client: ' + self.request + '---');
+      if (!ignoredCmds.includes(self.request) && !self.request.startsWith('playlistinfo "')) self.logger.info('Upnp client: ' + self.request + '---');
       
       if (message.indexOf('addid') !== -1) {
         self.logger.info('Starting UPNP Playback');
@@ -127,8 +126,8 @@ UpnpInterface.prototype.onVolumioStart = function () {
                 self.statusStr = resp;
                 let mpdState = parseKeyValueMessage(self.statusStr);
                 if (mpdState){
+                    // adjust state for time offset and duration
                     self.helper.copyStatus(mpdState, self.TimeOffset, self.duration);
-                    //if (self.no % 10 == 0) self.logger.info('Upnp client: Fake state ' + self.helper.printStatus()+ okay_response);
                     resp = self.helper.printStatus() + okay_response;
                 }
             }
@@ -143,7 +142,7 @@ UpnpInterface.prototype.onVolumioStart = function () {
                             self.TimeOffset = state.elapsed;
                         } else self.TimeOffset = 0;
                 }
-                self.helper.copySong(parseKeyValueMessage(resp));
+                self.helper.copySong(parseKeyValueMessage(self.songStr));
                 self.logger.info('Upnp client: song changed! Idling? ' + self.idling);  
                 if (self.idling) {
                     resp += 'changed: playlist\nchanged: player' + okay_response;
@@ -155,8 +154,6 @@ UpnpInterface.prototype.onVolumioStart = function () {
                     self.duration = volumioState.duration;
                     self.helper.setSong(volumioState);
                     self.logger.info('Upnp client: updated song\n' + self.helper.printSong()); 
-    //                volumioState.seek -= self.TimeOffset*1000;
-    //                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus(volumioState));
                 }
                 if (self.songStr) self.logger.info('Upnp client: song ' + JSON.stringify(parseKeyValueMessage(self.songStr)) + ' with Offset: ' + self.TimeOffset);
             }   
@@ -411,7 +408,7 @@ function parseKeyValueMessage (msg) {
        return result;
     }
     if (p.indexOf('ACK') !== -1) {  // error 
-        result[keyValue[1]] = p;
+        result['error'] = p;
        return result;
     }
     var keyValue = p.match(/([^ ]+): (.*)/);
