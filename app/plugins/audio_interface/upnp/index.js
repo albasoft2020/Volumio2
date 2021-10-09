@@ -163,11 +163,11 @@ UpnpInterface.prototype.onVolumioStart = function () {
         } else {
 //            self.logger.info('Upnp client: reply to ' + self.request + '\n' + data);
         }
-//        if (self.no % 20 == 0) {
-//            self.logger.info('Upnp client: number of requests: ' + self.no);
+        if (self.no % 50 == 0) {
+            self.logger.info('Upnp client: number of requests: ' + self.no);
 //            if (self.statusStr) self.logger.info('Upnp client: status ' + JSON.stringify(parseKeyValueMessage(self.statusStr)));
-//            if (self.songStr) self.logger.info('Upnp client: song ' + JSON.stringify(parseKeyValueMessage(self.songStr)) + ' with Offset: ' + self.TimeOffset);
-////            if (self.playlistStr) self.logger.info('Upnp client: Playlist ' + self.playlistStr);      
+            if (self.songStr) self.logger.info('Upnp client: song ' + JSON.stringify(parseKeyValueMessage(self.songStr)) + ' with Offset: ' + self.TimeOffset);
+//            if (self.playlistStr) self.logger.info('Upnp client: Playlist ' + self.playlistStr);      
 //            let volumioState = self.commandRouter.volumioGetState();
 //            if (volumioState){
 //                self.duration = volumioState.duration;
@@ -179,7 +179,7 @@ UpnpInterface.prototype.onVolumioStart = function () {
 //                self.helper.copyStatus(mpdState, self.TimeOffset, self.duration);
 //                self.logger.info('Upnp client: Fake state ' + self.helper.printStatus()+ okay_response);
 //            }
-//        }
+        }
         return resp;
     };
   
