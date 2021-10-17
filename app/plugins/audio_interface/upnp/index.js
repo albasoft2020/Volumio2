@@ -155,7 +155,7 @@ UpnpInterface.prototype.onVolumioStart = function () {
                     self.helper.setSong(volumioState);
                     self.logger.info('Upnp client: updated song\n' + self.helper.printSong()); 
                 }
-                if (self.songStr) self.logger.info('Upnp client: song ' + JSON.stringify(parseKeyValueMessage(self.songStr)) + ' with Offset: ' + self.TimeOffset);
+                if (self.songStr) self.logger.info('Upnp client: song\n' + self.songStr + ' with Offset: ' + self.TimeOffset);
             }   
         } else if (self.request.startsWith('playlist')){
             if (self.request.length < 14) self.playlistStr = resp;
@@ -404,10 +404,10 @@ function parseKeyValueMessage (msg) {
     if (p.length === 0) {
       return result;
     }
-    if (p.indexOf('OK') !== -1) {  // ignore this line and return result so far as this should be the last line of response
+    if (p.startsWith('OK')) {  // ignore this line and return result so far as this should be the last line of response
        return result;
     }
-    if (p.indexOf('ACK') !== -1) {  // error 
+    if (p.startsWith('ACK')) {  // error 
         result['error'] = p;
        return result;
     }
