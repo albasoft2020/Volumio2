@@ -203,7 +203,10 @@ InterfaceMPD.prototype.handleMessage = function (message, socket) {
     socket.write(okay_response);
   } else {
     var handler = self.commandHandlers[sCommand];
-    if (handler) { handler.call(self, sCommand, sParam, socket); } else { self.commRouter.pushConsoleMessage('default'); }
+    if (handler) { 
+        self.commRouter.pushConsoleMessage('[InterfaceMPD] Received command "' + sCommand + '" with parameter ' + sParam);
+        handler.call(self, sCommand, sParam, socket); 
+    } else { self.commRouter.pushConsoleMessage('default'); }
   }
 };
 
@@ -303,9 +306,10 @@ InterfaceMPD.prototype.handleCrossfade = function (sCommand, sParam, client) {
 // Handler for command: CURRENTSONG
 InterfaceMPD.prototype.handleCurrentsong = function (sCommand, sParam, client) {
     var self = this;
-  self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::CurrentSong info requested with sParam ' + sParam);
+  //self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::CurrentSong info requested with sParam ' + sParam);
   // Respond with default 'OK'
-  client.write(okay_response);
+  self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending currentsong response: \n'+ self.helper.printSong());
+  client.write(self.helper.printSong() + okay_response);
 };
 
 // Handler for command: DECODERS
@@ -1000,8 +1004,9 @@ InterfaceMPD.prototype.pushQueue = function (queue) {
 // Receive player state updates from commandRouter and broadcast to all connected clients
 InterfaceMPD.prototype.pushState = function (state, socket) {
   var self = this;
-  //self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::pushState to socket ' + JSON.stringify(socket) );
-  self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::pushState ' + JSON.stringify(state) );
+  var toSocket = '';
+  if (socket) { toSocket = ' in response to request by client.'; }
+  self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::pushState ' + JSON.stringify(state) + toSocket);
 
   // if requested by client, respond
   if (socket) {
@@ -1010,6 +1015,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
   } else {
     // pass state to the helper
     self.helper.setStatus(state);
+    self.helper.setSong(state);
 
     // broadcast state changed to all idlers
     self.idles.forEach(function (client) {
