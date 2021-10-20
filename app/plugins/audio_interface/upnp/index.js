@@ -82,12 +82,12 @@ UpnpInterface.prototype.onVolumioStart = function () {
         try {
           serviceSocket.write(msg);
         } catch (e) {
-          console.log('Upnp client error: ' + e);
+          console.log('Upnp error (requesting ' + message + '): ' + e);
         }
       }
     });
     socket.on('error', function (error) {
-      console.log('Upnp client error: ' + error);
+      console.log('Upnp upmpdcli error: ' + error);
     });
 
     var serviceSocket = new net.Socket();
