@@ -128,7 +128,7 @@ function InterfaceMPD (context) {
     client.setEncoding('utf8');
 
     // MPD welcome command
-    client.write('OK MPD 0.19.0\n'); // TODO not hardcoded?
+    client.write('OK MPD 0.20.0\n'); // TODO not hardcoded?
 
     // Incoming message (maybe a command?)
     var buffer = ''; // Buffer since we may not receive whole lines
@@ -175,7 +175,8 @@ function InterfaceMPD (context) {
 // Incoming message handler
 InterfaceMPD.prototype.handleMessage = function (message, socket) {
   var self = this;
-
+  
+    self.commRouter.pushConsoleMessage('[InterfaceMPD] Incoming command: ' + message);
   // some vars to help extract command/parameters from line
   var nSpaceLocation = 0;
   var sCommand = '';
@@ -197,7 +198,7 @@ InterfaceMPD.prototype.handleMessage = function (message, socket) {
     okay_response = '';
   } else if (sCommand == 'command_list_ok_begin') {
     okay_response = 'list_OK\n';
-    socket.write(okay_response);
+//    socket.write(okay_response);
   } else if (sCommand == 'command_list_end') {
     okay_response = 'OK\n';
     socket.write(okay_response);
@@ -308,7 +309,7 @@ InterfaceMPD.prototype.handleCurrentsong = function (sCommand, sParam, client) {
     var self = this;
   //self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::CurrentSong info requested with sParam ' + sParam);
   // Respond with default 'OK'
-  self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending currentsong response: \n'+ self.helper.printSong());
+  self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending currentsong response: \n'+ self.helper.printSong() + okay_response + '---');
   client.write(self.helper.printSong() + okay_response);
 };
 
@@ -576,7 +577,8 @@ InterfaceMPD.prototype.handlePlaylist = function (sCommand, sParam, client) {
       self.helper.setQueue(queue);
     }).then(function () {
       // fetch MPD output from helper
-      client.write(self.helper.printPlaylist());
+      self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending playlist response: \n'+ self.helper.printPlaylist() + okay_response + '---');
+      client.write(self.helper.printPlaylist() + okay_response);
     })
     .fail(libFast.bind(self.commRouter.pushConsoleMessage, self.commRouter))
     .done(function () {
@@ -584,7 +586,7 @@ InterfaceMPD.prototype.handlePlaylist = function (sCommand, sParam, client) {
     });
 
   // Respond with default 'OK'
-  client.write(okay_response);
+  //client.write(okay_response);
 };
 
 // Handler for command: PLAYLISTADD
@@ -622,8 +624,7 @@ InterfaceMPD.prototype.handlePlaylistid = function (sCommand, sParam, client) {
 
 // Handler for command: PLAYLISTINFO
 InterfaceMPD.prototype.handlePlaylistinfo = function (sCommand, sParam, client) {
-  // Respond with default 'OK'
-  client.write(okay_response);
+  this.handlePlaylist(sCommand, sParam, client);
 };
 
 // Handler for command: PLAYLISTMOVE
@@ -824,22 +825,25 @@ InterfaceMPD.prototype.handleStats = function (sCommand, sParam, client) {
 // Handler for command: STATUS
 InterfaceMPD.prototype.handleStatus = function (sCommand, sParam, client) {
   var self = this;
-  var timeStart = Date.now();
+//  var timeStart = Date.now();
+//
+//  // Fetch status from CommandRouter
+//  self.logStart('Client requests Volumio status')
+//    .then(libFast.bind(self.commRouter.volumioGetState, self.commRouter))
+//  // Forward state to pushState function
+//    .then(function (state) {
+//      self.pushState.call(self, state, client);
+//    })
+//    .fail(libFast.bind(self.commRouter.pushConsoleMessage, self.commRouter))
+//    .done(function () {
+//      return self.logDone(timeStart);
+//    });
+//
+//  // Respond with default 'OK'
+//  //client.write(okay_response);
+  self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending status response: \n'+ self.helper.printStatus() + okay_response + '---');
+  client.write(self.helper.printStatus() + okay_response);
 
-  // Fetch status from CommandRouter
-  self.logStart('Client requests Volumio status')
-    .then(libFast.bind(self.commRouter.volumioGetState, self.commRouter))
-  // Forward state to pushState function
-    .then(function (state) {
-      self.pushState.call(self, state, client);
-    })
-    .fail(libFast.bind(self.commRouter.pushConsoleMessage, self.commRouter))
-    .done(function () {
-      return self.logDone(timeStart);
-    });
-
-  // Respond with default 'OK'
-  //client.write(okay_response);
 };
 
 // Handler for command: STOP

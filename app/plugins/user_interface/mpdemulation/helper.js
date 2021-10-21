@@ -226,7 +226,7 @@ module.exports = {
   printPlaylist: function () {
     var output = '';
     queue.forEach(function (track) {
-      output += track.position + ':';
+//      output += track.position + ':';
       output += 'file: \'[' + track.service + '] ' + track.metadata.title + '"';
       output += '\n';
     });
