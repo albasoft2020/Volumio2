@@ -363,7 +363,7 @@ InterfaceMPD.prototype.handleIdle = function (sCommand, sParam, client) {
   self.idles.push(client);
 
   // Respond with default 'OK'
-  client.write(okay_response);
+  //client.write(okay_response);
 };
 
 // Handler for command: KILL
@@ -1023,8 +1023,9 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
 
     // broadcast state changed to all idlers
     self.idles.forEach(function (client) {
-      client.write('changed: player\n' + okay_response);
+      client.write('changed: playlist\nchanged: player\n' + okay_response);
     });
+    self.idles = [];
   }
   // TODO q-stuff
 };
