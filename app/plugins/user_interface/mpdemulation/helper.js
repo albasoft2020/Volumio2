@@ -223,13 +223,15 @@ module.exports = {
   },
 
   // Give MPD output of queue
-  printPlaylist: function () {
+  printPlaylist: function (pos) {
     var output = '';
-    queue.forEach(function (track) {
-//      output += track.position + ':';
-      output += 'file: \'[' + track.service + '] ' + track.metadata.title + '"';
-      output += '\n';
-    });
+    if (pos  && (pos < status.playlistlength)) {
+        output += printArray(queue[pos]);
+    } else {
+        queue.forEach(function (track) {
+          output += printArray(track);
+        });
+    }
     return output;
   },
 
@@ -341,13 +343,24 @@ module.exports = {
     var positionNr = 0;
     newQueue.forEach(function (track) {
       var t = {
-        position: positionNr,
-        service: track.service,
-        trackid: track.trackid,
-        metadata: {
-          title: track.name
-        }
+        file: track.uri || '',
+        Pos: positionNr
+//        service: track.service,
+//        trackid: track.trackid,
+//        metadata: {
+//          title: track.name
+//        }
       };
+      // Copy (some of the) other keys that would be used by mpd, ingoring the rest
+      if (track.title) {
+          t.Title = track.title;
+      } else if (track.name) {
+          t.Title = track.name;
+      }
+      if (track.name) { t.Name = track.name; }
+      if (track.artist) { t.Artist = track.artist; }
+      if (track.album) { t.Album = track.album; }
+      
       positionNr++;
       queue.push(t);
     });

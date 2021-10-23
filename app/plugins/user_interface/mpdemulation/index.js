@@ -573,12 +573,24 @@ InterfaceMPD.prototype.handlePlaylist = function (sCommand, sParam, client) {
   self.logStart('Client requests Volumio queue')
     .then(libFast.bind(self.commRouter.volumioGetQueue, self.commRouter))
     .then(function (queue) {
+      self.commRouter.pushConsoleMessage('[InterfaceMPD] Received queue: \n'+ JSON.stringify(queue) + '---');
       // forward queue to helper
       self.helper.setQueue(queue);
     }).then(function () {
       // fetch MPD output from helper
-      self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending playlist response: \n'+ self.helper.printPlaylist() + okay_response + '---');
-      client.write(self.helper.printPlaylist() + okay_response);
+      let resp = '';
+      if (sParam){
+          resp = self.helper.printPlaylist(sParam);
+          if (resp){
+              resp += okay_response;
+          } else { // song not found in playlist
+              resp = 'ACK [50@0] (' + sCommand + ') song doesn\'t exist: "' + sParam + '"\n';
+          }
+      } else {
+          resp = self.helper.printPlaylist() + okay_response;
+      }
+      self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending playlist response: \n'+ resp + '---');
+      client.write(resp);
     })
     .fail(libFast.bind(self.commRouter.pushConsoleMessage, self.commRouter))
     .done(function () {
