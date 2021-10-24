@@ -1,13 +1,19 @@
 'use strict';
 
 var net = require('net');
+//var libMpd = require('../music_service/mpd/lib/mpd.js');
 var libQ = require('kew');
 var libFast = require('fast.js');
 var okay_response = 'OK\n';
 
-// MPD info
+// MPD info for emulation
 var mpdPort = 6500;
 var mpdAddress = '0.0.0.0';
+
+// real MPD info
+  var remoteport = 6600;
+  var remoteaddr = '127.0.0.1';
+ 
 
 // TODO check if we can move this to the helper and make it GLOBAL?
 const command = { // List of all MPD commands
@@ -168,6 +174,20 @@ function InterfaceMPD (context) {
       throw err;
     }
   });
+  
+  self.serviceSocket = new net.Socket();
+  self.serviceSocket.connect(parseInt(remoteport), remoteaddr, function () {
+    });
+
+   self.serviceSocket.on('data', function (data) {
+        self.commRouter.pushConsoleMessage('[InterfaceMPD] received real MPD data:\n' + data);
+        if (!data.toString().startsWith('OK MPD')) {
+//            client.write(data);
+        }
+    });
+  self.serviceSocket.on('error', function (error) {
+      self.logger.error('[InterfaceMPD]  mpd error: ' + error);
+    });
 }
 
 // ================================ INTERNAL FUNCTIONS
@@ -209,6 +229,20 @@ InterfaceMPD.prototype.handleMessage = function (message, socket) {
         handler.call(self, sCommand, sParam, socket); 
     } else { self.commRouter.pushConsoleMessage('default'); }
   }
+};
+
+
+// Handler which simply passes the commands on to the real MPD
+InterfaceMPD.prototype.handleThroughRealMPD = function (sCommand, sParam, client) {
+    var self = this;
+    let cmd = sCommand;
+    if (sParam) { cmd += ' ' + sParam; };
+    self.commRouter.pushConsoleMessage('[InterfaceMPD] Command "' + cmd + '" passed on to real MPD');    
+    // send the actual command
+      
+    self.serviceSocket.write(cmd + '\n');
+        // prime socket to return mpd response to client
+ 
 };
 
 InterfaceMPD.prototype.logDone = function (timeStart) {
@@ -1046,98 +1080,100 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
 InterfaceMPD.prototype.loadCommandHandlers = function () {
   var self = this;
   self.commandHandlers = {};
-  self.commandHandlers[command.ADD] = self.handleAdd;
-  self.commandHandlers[command.ADDID] = self.handleAddid;
-  self.commandHandlers[command.ADDTAGID] = self.handleAddtagid;
-  self.commandHandlers[command.CHANNELS] = self.handleChannels;
-  self.commandHandlers[command.CLEAR] = self.handleClear;
-  self.commandHandlers[command.CLEARERROR] = self.handleClearerror;
-  self.commandHandlers[command.CLEARTAGID] = self.handleCleartagid;
-  self.commandHandlers[command.CLOSE] = self.handleClose;
-  self.commandHandlers[command.COMMANDS] = self.handleCommands;
-  self.commandHandlers[command.CONFIG] = self.handleConfig;
-  self.commandHandlers[command.CONSUME] = self.handleConsume;
-  self.commandHandlers[command.COUNT] = self.handleCount;
-  self.commandHandlers[command.CROSSFADE] = self.handleCrossfade;
+  // By default just pass the command through to the real mpd for now:
+  for(const cmd in command) { self.commandHandlers[command[cmd]] = self.handleThroughRealMPD; };
+//  self.commandHandlers[command.ADD] = self.handleAdd;
+//  self.commandHandlers[command.ADDID] = self.handleAddid;
+//  self.commandHandlers[command.ADDTAGID] = self.handleAddtagid;
+//  self.commandHandlers[command.CHANNELS] = self.handleChannels;
+//  self.commandHandlers[command.CLEAR] = self.handleClear;
+//  self.commandHandlers[command.CLEARERROR] = self.handleClearerror;
+//  self.commandHandlers[command.CLEARTAGID] = self.handleCleartagid;
+//  self.commandHandlers[command.CLOSE] = self.handleClose;
+//  self.commandHandlers[command.COMMANDS] = self.handleCommands;
+//  self.commandHandlers[command.CONFIG] = self.handleConfig;
+//  self.commandHandlers[command.CONSUME] = self.handleConsume;
+//  self.commandHandlers[command.COUNT] = self.handleCount;
+//  self.commandHandlers[command.CROSSFADE] = self.handleCrossfade;
   self.commandHandlers[command.CURRENTSONG] = self.handleCurrentsong;
-  self.commandHandlers[command.DECODERS] = self.handleDecoders;
-  self.commandHandlers[command.DELETE] = self.handleDelete;
-  self.commandHandlers[command.DELETEID] = self.handleDeleteid;
-  self.commandHandlers[command.DISABLEOUTPUT] = self.handleDisableoutput;
-  self.commandHandlers[command.ENABLEOUTPUT] = self.handleEnableoutput;
-  self.commandHandlers[command.FIND] = self.handleFind;
-  self.commandHandlers[command.FINDADD] = self.handleFindadd;
+//  self.commandHandlers[command.DECODERS] = self.handleDecoders;
+//  self.commandHandlers[command.DELETE] = self.handleDelete;
+//  self.commandHandlers[command.DELETEID] = self.handleDeleteid;
+//  self.commandHandlers[command.DISABLEOUTPUT] = self.handleDisableoutput;
+//  self.commandHandlers[command.ENABLEOUTPUT] = self.handleEnableoutput;
+//  self.commandHandlers[command.FIND] = self.handleFind;
+//  self.commandHandlers[command.FINDADD] = self.handleFindadd;
   self.commandHandlers[command.IDLE] = self.handleIdle;
-  self.commandHandlers[command.KILL] = self.handleKill;
-  self.commandHandlers[command.LIST] = self.handleList;
-  self.commandHandlers[command.LISTALL] = self.handleListall;
-  self.commandHandlers[command.LISTALLINFO] = self.handleListallinfo;
-  self.commandHandlers[command.LISTFILES] = self.handleListfiles;
-  self.commandHandlers[command.LISTMOUNTS] = self.handleListmounts;
-  self.commandHandlers[command.LISTPLAYLIST] = self.handleListplaylist;
-  self.commandHandlers[command.LISTPLAYLISTINFO] = self.handleListplaylistinfo;
-  self.commandHandlers[command.LISTPLAYLISTS] = self.handleListplaylists;
-  self.commandHandlers[command.LOAD] = self.handleLoad;
-  self.commandHandlers[command.LSINFO] = self.handleLsinfo;
-  self.commandHandlers[command.MIXRAMPDB] = self.handleMixrampdb;
-  self.commandHandlers[command.MIXRAMPDELAY] = self.handleMixrampdelay;
-  self.commandHandlers[command.MOUNT] = self.handleMount;
-  self.commandHandlers[command.MOVE] = self.handleMove;
-  self.commandHandlers[command.MOVEID] = self.handleMoveid;
-  self.commandHandlers[command.NEXT] = self.handleNext;
-  self.commandHandlers[command.NOTCOMMANDS] = self.handleNotcommands;
-  self.commandHandlers[command.OUTPUTS] = self.handleOutputs;
-  self.commandHandlers[command.PASSWORD] = self.handlePassword;
-  self.commandHandlers[command.PAUSE] = self.handlePause;
-  self.commandHandlers[command.PING] = self.handlePing;
-  self.commandHandlers[command.PLAY] = self.handlePlay;
-  self.commandHandlers[command.PLAYID] = self.handlePlayid;
+//  self.commandHandlers[command.KILL] = self.handleKill;
+//  self.commandHandlers[command.LIST] = self.handleList;
+//  self.commandHandlers[command.LISTALL] = self.handleListall;
+//  self.commandHandlers[command.LISTALLINFO] = self.handleListallinfo;
+//  self.commandHandlers[command.LISTFILES] = self.handleListfiles;
+//  self.commandHandlers[command.LISTMOUNTS] = self.handleListmounts;
+//  self.commandHandlers[command.LISTPLAYLIST] = self.handleListplaylist;
+//  self.commandHandlers[command.LISTPLAYLISTINFO] = self.handleListplaylistinfo;
+//  self.commandHandlers[command.LISTPLAYLISTS] = self.handleListplaylists;
+//  self.commandHandlers[command.LOAD] = self.handleLoad;
+//  self.commandHandlers[command.LSINFO] = self.handleLsinfo;
+//  self.commandHandlers[command.MIXRAMPDB] = self.handleMixrampdb;
+//  self.commandHandlers[command.MIXRAMPDELAY] = self.handleMixrampdelay;
+//  self.commandHandlers[command.MOUNT] = self.handleMount;
+//  self.commandHandlers[command.MOVE] = self.handleMove;
+//  self.commandHandlers[command.MOVEID] = self.handleMoveid;
+//  self.commandHandlers[command.NEXT] = self.handleNext;
+//  self.commandHandlers[command.NOTCOMMANDS] = self.handleNotcommands;
+//  self.commandHandlers[command.OUTPUTS] = self.handleOutputs;
+//  self.commandHandlers[command.PASSWORD] = self.handlePassword;
+//  self.commandHandlers[command.PAUSE] = self.handlePause;
+//  self.commandHandlers[command.PING] = self.handlePing;
+//  self.commandHandlers[command.PLAY] = self.handlePlay;
+//  self.commandHandlers[command.PLAYID] = self.handlePlayid;
   self.commandHandlers[command.PLAYLIST] = self.handlePlaylist;
-  self.commandHandlers[command.PLAYLISTADD] = self.handlePlaylistadd;
-  self.commandHandlers[command.PLAYLISTCLEAR] = self.handlePlaylistclear;
-  self.commandHandlers[command.PLAYLISTDELETE] = self.handlePlaylistdelete;
-  self.commandHandlers[command.PLAYLISTFIND] = self.handlePlaylistfind;
-  self.commandHandlers[command.PLAYLISTID] = self.handlePlaylistid;
+//  self.commandHandlers[command.PLAYLISTADD] = self.handlePlaylistadd;
+//  self.commandHandlers[command.PLAYLISTCLEAR] = self.handlePlaylistclear;
+//  self.commandHandlers[command.PLAYLISTDELETE] = self.handlePlaylistdelete;
+//  self.commandHandlers[command.PLAYLISTFIND] = self.handlePlaylistfind;
+//  self.commandHandlers[command.PLAYLISTID] = self.handlePlaylistid;
   self.commandHandlers[command.PLAYLISTINFO] = self.handlePlaylistinfo;
-  self.commandHandlers[command.PLAYLISTMOVE] = self.handlePlaylistmove;
-  self.commandHandlers[command.PLAYLISTSEARCH] = self.handlePlaylistsearch;
-  self.commandHandlers[command.PLCHANGES] = self.handlePlchanges;
-  self.commandHandlers[command.PLCHANGEPOSID] = self.handlePlchangesposid;
-  self.commandHandlers[command.PREVIOUS] = self.handlePrevious;
-  self.commandHandlers[command.PRIO] = self.handlePrio;
-  self.commandHandlers[command.PRIOID] = self.handlePrioid;
-  self.commandHandlers[command.RANDOM] = self.handleRandom;
-  self.commandHandlers[command.RANGEID] = self.handleRangeid;
-  self.commandHandlers[command.READCOMMENTS] = self.handleReadcomments;
-  self.commandHandlers[command.READMESSAGES] = self.handleReadmessages;
-  self.commandHandlers[command.RENAME] = self.handleRename;
-  self.commandHandlers[command.REPEAT] = self.handleRepeat;
-  self.commandHandlers[command.REPLAY_GAIN_MODE] = self.handleReplay_gain_mode;
-  self.commandHandlers[command.REPLAY_GAIN_STATUS] = self.handleReplay_gain_status;
-  self.commandHandlers[command.RESCAN] = self.handleRescan;
-  self.commandHandlers[command.REMOVE] = self.handleRm;
-  self.commandHandlers[command.SAVE] = self.handleSave;
-  self.commandHandlers[command.SEARCH] = self.handleSearch;
-  self.commandHandlers[command.SEARCHADD] = self.handleSearchadd;
-  self.commandHandlers[command.SEARCHADDPL] = self.handleSearchaddpl;
-  self.commandHandlers[command.SEEK] = self.handleSeek;
-  self.commandHandlers[command.SEEKCUR] = self.handleSeekcur;
-  self.commandHandlers[command.SEEKID] = self.handleSeekid;
-  self.commandHandlers[command.SENDMESSAGE] = self.handleSendmessage;
-  self.commandHandlers[command.SETVOL] = self.handleSetvol;
-  self.commandHandlers[command.SHUFFLE] = self.handleShuffle;
-  self.commandHandlers[command.SINGLE] = self.handleSingle;
-  self.commandHandlers[command.STATS] = self.handleStats;
+//  self.commandHandlers[command.PLAYLISTMOVE] = self.handlePlaylistmove;
+//  self.commandHandlers[command.PLAYLISTSEARCH] = self.handlePlaylistsearch;
+//  self.commandHandlers[command.PLCHANGES] = self.handlePlchanges;
+//  self.commandHandlers[command.PLCHANGEPOSID] = self.handlePlchangesposid;
+//  self.commandHandlers[command.PREVIOUS] = self.handlePrevious;
+//  self.commandHandlers[command.PRIO] = self.handlePrio;
+//  self.commandHandlers[command.PRIOID] = self.handlePrioid;
+//  self.commandHandlers[command.RANDOM] = self.handleRandom;
+//  self.commandHandlers[command.RANGEID] = self.handleRangeid;
+//  self.commandHandlers[command.READCOMMENTS] = self.handleReadcomments;
+//  self.commandHandlers[command.READMESSAGES] = self.handleReadmessages;
+//  self.commandHandlers[command.RENAME] = self.handleRename;
+//  self.commandHandlers[command.REPEAT] = self.handleRepeat;
+//  self.commandHandlers[command.REPLAY_GAIN_MODE] = self.handleReplay_gain_mode;
+//  self.commandHandlers[command.REPLAY_GAIN_STATUS] = self.handleReplay_gain_status;
+//  self.commandHandlers[command.RESCAN] = self.handleRescan;
+//  self.commandHandlers[command.REMOVE] = self.handleRm;
+//  self.commandHandlers[command.SAVE] = self.handleSave;
+//  self.commandHandlers[command.SEARCH] = self.handleSearch;
+//  self.commandHandlers[command.SEARCHADD] = self.handleSearchadd;
+//  self.commandHandlers[command.SEARCHADDPL] = self.handleSearchaddpl;
+//  self.commandHandlers[command.SEEK] = self.handleSeek;
+//  self.commandHandlers[command.SEEKCUR] = self.handleSeekcur;
+//  self.commandHandlers[command.SEEKID] = self.handleSeekid;
+//  self.commandHandlers[command.SENDMESSAGE] = self.handleSendmessage;
+//  self.commandHandlers[command.SETVOL] = self.handleSetvol;
+//  self.commandHandlers[command.SHUFFLE] = self.handleShuffle;
+//  self.commandHandlers[command.SINGLE] = self.handleSingle;
+//  self.commandHandlers[command.STATS] = self.handleStats;
   self.commandHandlers[command.STATUS] = self.handleStatus;
-  self.commandHandlers[command.STOP] = self.handleStop;
-  self.commandHandlers[command.SUBSCRIBE] = self.handleSubscribe;
-  self.commandHandlers[command.SWAP] = self.handleSwap;
-  self.commandHandlers[command.SWAPID] = self.handleSwapid;
-  self.commandHandlers[command.TAGTYPES] = self.handleTagtypes;
-  self.commandHandlers[command.TOGGLEOUTPUT] = self.handleToggleoutput;
-  self.commandHandlers[command.UNMOUNT] = self.handleUnmount;
-  self.commandHandlers[command.UNSUBSCRIBE] = self.handleUnsubscribe;
-  self.commandHandlers[command.UPDATE] = self.handleUpdate;
-  self.commandHandlers[command.URLHANDLERS] = self.handleUrlhandlers;
-  self.commandHandlers[command.VOLUME] = self.handleVolume;
+//  self.commandHandlers[command.STOP] = self.handleStop;
+//  self.commandHandlers[command.SUBSCRIBE] = self.handleSubscribe;
+//  self.commandHandlers[command.SWAP] = self.handleSwap;
+//  self.commandHandlers[command.SWAPID] = self.handleSwapid;
+//  self.commandHandlers[command.TAGTYPES] = self.handleTagtypes;
+//  self.commandHandlers[command.TOGGLEOUTPUT] = self.handleToggleoutput;
+//  self.commandHandlers[command.UNMOUNT] = self.handleUnmount;
+//  self.commandHandlers[command.UNSUBSCRIBE] = self.handleUnsubscribe;
+//  self.commandHandlers[command.UPDATE] = self.handleUpdate;
+//  self.commandHandlers[command.URLHANDLERS] = self.handleUrlhandlers;
+//  self.commandHandlers[command.VOLUME] = self.handleVolume;
 };
