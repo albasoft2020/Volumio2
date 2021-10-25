@@ -127,6 +127,7 @@ function InterfaceMPD (context) {
   self.helper = require('./helper.js');
   self.idles = [];
   self.loadCommandHandlers();
+  self.currentClients = [];
 
   // create server
   var protocolServer = net.createServer(function (client) {
@@ -176,17 +177,23 @@ function InterfaceMPD (context) {
   });
   
   self.serviceSocket = new net.Socket();
-  self.serviceSocket.connect(parseInt(remoteport), remoteaddr, function () {
+  self.serviceSocket.connect(remoteport, remoteaddr, function () {
+        self.commRouter.pushConsoleMessage('[InterfaceMPD] cennected to real MPD');
     });
 
    self.serviceSocket.on('data', function (data) {
         self.commRouter.pushConsoleMessage('[InterfaceMPD] received real MPD data:\n' + data);
         if (!data.toString().startsWith('OK MPD')) {
-//            client.write(data);
+            let client = self.currentClients.shift();
+            if (client) client.write(data);
         }
     });
   self.serviceSocket.on('error', function (error) {
-      self.logger.error('[InterfaceMPD]  mpd error: ' + error);
+      self.commRouter.pushConsoleMessage('[InterfaceMPD]  mpd error: ' + error);
+    });
+    
+  self.serviceSocket.on('end', function () {
+      self.commRouter.pushConsoleMessage('[InterfaceMPD]  disconnected from mpd');
     });
 }
 
@@ -237,12 +244,37 @@ InterfaceMPD.prototype.handleThroughRealMPD = function (sCommand, sParam, client
     var self = this;
     let cmd = sCommand;
     if (sParam) { cmd += ' ' + sParam; };
-    self.commRouter.pushConsoleMessage('[InterfaceMPD] Command "' + cmd + '" passed on to real MPD');    
+    // Add client to the list
+    self.currentClients.push(client);  
     // send the actual command
-      
-    self.serviceSocket.write(cmd + '\n');
+    self.mpdSocketReady().then( () => { 
+        self.commRouter.pushConsoleMessage('[InterfaceMPD] Command "' + cmd + '" passed on to real MPD');    
+        self.serviceSocket.write(cmd + '\n'); 
+    } );
         // prime socket to return mpd response to client
  
+};
+
+InterfaceMPD.prototype.mpdSocketReady = function () {
+    var self = this;
+    var defer = libQ.defer();
+
+    self.commRouter.pushConsoleMessage('[InterfaceMPD] Checking if real MPD is ready: ' + self.serviceSocket.readyState);
+
+    if (self.serviceSocket) {
+        if (self.serviceSocket.readyState == 'open') { 
+        self.commRouter.pushConsoleMessage('[InterfaceMPD] connection to real MPD is open');                
+            return libQ.resolve(true); 
+        }
+    } 
+//    self.serviceSocket = new net.Socket();
+    self.serviceSocket.connect(remoteport, remoteaddr, function () {
+        self.commRouter.pushConsoleMessage('[InterfaceMPD] connected to real MPD');
+    });
+    self.serviceSocket.on('connect', () => { defer.resolve(true); 
+        self.commRouter.pushConsoleMessage('[InterfaceMPD] connection to real MPD ready');    
+    });
+    return defer.promise;
 };
 
 InterfaceMPD.prototype.logDone = function (timeStart) {
