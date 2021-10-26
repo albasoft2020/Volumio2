@@ -183,11 +183,22 @@ function InterfaceMPD (context) {
 
    self.serviceSocket.on('data', function (data) {
         self.commRouter.pushConsoleMessage('[InterfaceMPD] received real MPD data:\n' + data);
-        if (!data.toString().startsWith('OK MPD')) {
-            let client = self.currentClients.shift();
+        let dstr = data.toString();
+        let client;
+        if (dstr.startsWith('OK MPD')) {
+            if (dstr.indexOf('\n') > -1) { 
+                dstr = dstr.substr(dstr.indexOf('\n')+1); 
+                if (dstr.length > 0) {
+                    client = self.currentClients.shift();
+                    if (client) client.write(dstr);                    
+                }                    
+            } 
+        } else {
+            client = self.currentClients.shift();
             if (client) client.write(data);
         }
     });
+    
   self.serviceSocket.on('error', function (error) {
       self.commRouter.pushConsoleMessage('[InterfaceMPD]  mpd error: ' + error);
     });
@@ -263,11 +274,11 @@ InterfaceMPD.prototype.mpdSocketReady = function () {
 
     if (self.serviceSocket) {
         if (self.serviceSocket.readyState == 'open') { 
-        self.commRouter.pushConsoleMessage('[InterfaceMPD] connection to real MPD is open');                
-            return libQ.resolve(true); 
+            self.commRouter.pushConsoleMessage('[InterfaceMPD] connection to real MPD is already open');  
+            defer.resolve(true);
+            return defer.promise;
         }
     } 
-//    self.serviceSocket = new net.Socket();
     self.serviceSocket.connect(remoteport, remoteaddr, function () {
         self.commRouter.pushConsoleMessage('[InterfaceMPD] connected to real MPD');
     });
