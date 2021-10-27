@@ -15,6 +15,9 @@ var mpdAddress = '0.0.0.0';
   var remoteaddr = '127.0.0.1';
   
   var debug = true;
+  
+  // Services that are playing through mpd
+  var mpdServices = ['mpd', 'webradio', 'upnp'];  //well, upnpn is not really used as service. Did I miss any others?
  
 
 // TODO check if we can move this to the helper and make it GLOBAL?
@@ -186,7 +189,7 @@ function InterfaceMPD (context) {
     // keep it alive
     // Feels a bit like a cheat, but so far I have not fund a reliable way to reconnect after it has been closed
     // mpdSocketReady() still sometimes leads to crashes it is has to re-establish a connection
-    self.serviceSocket.setKeepAlive(true);
+    //self.serviceSocket.setKeepAlive(true);
 
     self.serviceSocket.on('data', function (data) {
         if (debug) { self.commRouter.pushConsoleMessage('[InterfaceMPD] received real MPD data:\n' + data); };
@@ -269,8 +272,6 @@ InterfaceMPD.prototype.handleThroughRealMPD = function (sCommand, sParam, client
         if (debug) { self.commRouter.pushConsoleMessage('[InterfaceMPD] Command "' + cmd + '" passed on to real MPD'); };
         self.serviceSocket.write(cmd + '\n'); 
     } );
-        // prime socket to return mpd response to client
- 
 };
 
 InterfaceMPD.prototype.mpdSocketReady = function () {
@@ -287,9 +288,7 @@ InterfaceMPD.prototype.mpdSocketReady = function () {
         }
     } 
     self.serviceSocket.connect(remoteport, remoteaddr, function () {
-        if (debug) { self.commRouter.pushConsoleMessage('[InterfaceMPD] connecting to real MPD'); };
-    });
-    self.serviceSocket.on('connect', () => { defer.resolve(true); 
+        defer.resolve(true); 
         if (debug) { self.commRouter.pushConsoleMessage('[InterfaceMPD] connection to real MPD ready'); };
     });
     return defer.promise;
@@ -440,13 +439,11 @@ InterfaceMPD.prototype.handleFindadd = function (sCommand, sParam, client) {
 
 // Handler for command: IDLE
 InterfaceMPD.prototype.handleIdle = function (sCommand, sParam, client) {
-  var self = this;
+    var self = this;
 
-  // keep client in idle list
-  self.idles.push(client);
-
-  // Respond with default 'OK'
-  //client.write(okay_response);
+    // keep client in idle list
+    self.idles.push(client);
+    // Does not give an immediate response!
 };
 
 // Handler for command: KILL
@@ -585,8 +582,6 @@ InterfaceMPD.prototype.handleOutputs = function (sCommand, sParam, client) {
   client.write('outputid: 0\n');
   client.write('outputname: Default\n');
   client.write('outputenabled: 1\n');
-  client.write(okay_response);
-
   // Respond with default 'OK'
   client.write(okay_response);
 };
@@ -679,9 +674,6 @@ InterfaceMPD.prototype.handlePlaylist = function (sCommand, sParam, client) {
     .done(function () {
       return self.logDone(timeStart);
     });
-
-  // Respond with default 'OK'
-  //client.write(okay_response);
 };
 
 // Handler for command: PLAYLISTADD
@@ -919,26 +911,11 @@ InterfaceMPD.prototype.handleStats = function (sCommand, sParam, client) {
 
 // Handler for command: STATUS
 InterfaceMPD.prototype.handleStatus = function (sCommand, sParam, client) {
-  var self = this;
-//  var timeStart = Date.now();
-//
-//  // Fetch status from CommandRouter
-//  self.logStart('Client requests Volumio status')
-//    .then(libFast.bind(self.commRouter.volumioGetState, self.commRouter))
-//  // Forward state to pushState function
-//    .then(function (state) {
-//      self.pushState.call(self, state, client);
-//    })
-//    .fail(libFast.bind(self.commRouter.pushConsoleMessage, self.commRouter))
-//    .done(function () {
-//      return self.logDone(timeStart);
-//    });
-//
-//  // Respond with default 'OK'
-//  //client.write(okay_response);
-  self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending status response: \n'+ self.helper.printStatus() + okay_response + '---');
-  client.write(self.helper.printStatus() + okay_response);
-
+    let self = this;    
+    // Status should be up to date from the last pushState() call
+    let resp = self.helper.printStatus() + okay_response;
+    self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending status response: \n'+ resp + '---');
+    client.write(resp);
 };
 
 // Handler for command: STOP
@@ -1113,6 +1090,9 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
     // else broadcast to all idlers
   } else {
     // pass state to the helper
+    if (mpdServices.includes(state.service)) {
+        // get full mpd data from real mpd
+    }
     self.helper.setStatus(state);
     self.helper.setSong(state);
 
@@ -1131,6 +1111,7 @@ InterfaceMPD.prototype.loadCommandHandlers = function () {
   self.commandHandlers = {};
   // By default just pass the command through to the real mpd for now:
   for(const cmd in command) { self.commandHandlers[command[cmd]] = self.handleThroughRealMPD; };
+  // Uncomment specific implementations as and when ready
 //  self.commandHandlers[command.ADD] = self.handleAdd;
 //  self.commandHandlers[command.ADDID] = self.handleAddid;
 //  self.commandHandlers[command.ADDTAGID] = self.handleAddtagid;
