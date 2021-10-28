@@ -18,7 +18,8 @@ var mpdAddress = '0.0.0.0';
   
   // Services that are playing through mpd
   var mpdServices = ['mpd', 'webradio', 'upnp'];  //well, upnpn is not really used as service. Did I miss any others?
- 
+
+//var mpdDataHandler;
 
 // TODO check if we can move this to the helper and make it GLOBAL?
 const command = { // List of all MPD commands
@@ -133,6 +134,8 @@ function InterfaceMPD (context) {
   self.idles = [];
   self.loadCommandHandlers();
   self.currentClients = [];
+  
+  self.mpdDataHandler = self.mpdDataToClient();
 
   // create server
   var protocolServer = net.createServer(function (client) {
@@ -186,10 +189,10 @@ function InterfaceMPD (context) {
     self.serviceSocket.connect(remoteport, remoteaddr, function () {
         if (debug) { self.commRouter.pushConsoleMessage('[InterfaceMPD] cennected to real MPD'); };
     });
-    // keep it alive
-    // Feels a bit like a cheat, but so far I have not fund a reliable way to reconnect after it has been closed
-    // mpdSocketReady() still sometimes leads to crashes it is has to re-establish a connection
-    //self.serviceSocket.setKeepAlive(true);
+//    // keep it alive
+//    // Feels a bit like a cheat, but so far I have not fund a reliable way to reconnect after it has been closed
+//    // mpdSocketReady() still sometimes leads to crashes it is has to re-establish a connection
+//    self.serviceSocket.setKeepAlive(true);
 
     self.serviceSocket.on('data', function (data) {
         if (debug) { self.commRouter.pushConsoleMessage('[InterfaceMPD] received real MPD data:\n' + data); };
@@ -198,15 +201,14 @@ function InterfaceMPD (context) {
         if (dstr.startsWith('OK MPD')) {
             if (dstr.indexOf('\n') > -1) { 
                 dstr = dstr.substr(dstr.indexOf('\n')+1); 
-                if (dstr.length > 0) {
-                    client = self.currentClients.shift();
-                    if (client) client.write(dstr);                    
+                if (dstr.length <= 0) {
+                    // do nothing (this was just the re-connect version message of mpd)
+                    return;                 
                 }                    
             } 
-        } else {
-            client = self.currentClients.shift();
-            if (client) client.write(data);
-        }
+        } 
+        //self.mpdDataHandler.call(self, dstr);
+        self.mpdDataToClient(dstr);
     });
     
     self.serviceSocket.on('error', function (error) {
@@ -293,6 +295,19 @@ InterfaceMPD.prototype.mpdSocketReady = function () {
     });
     return defer.promise;
 };
+
+InterfaceMPD.prototype.mpdDataToClient = function (data) {
+    let self = this;
+    let client = self.currentClients.shift();
+    if (client) client.write(data); 
+};
+
+InterfaceMPD.prototype.mpdDataforInternalState = function (data) {
+    let self = this;
+//    let client = self.currentClients.shift();
+//    if (client) client.write(data); 
+};
+
 
 InterfaceMPD.prototype.logDone = function (timeStart) {
   var self = this;
@@ -391,7 +406,7 @@ InterfaceMPD.prototype.handleCrossfade = function (sCommand, sParam, client) {
 InterfaceMPD.prototype.handleCurrentsong = function (sCommand, sParam, client) {
     var self = this;
     let resp = self.helper.printSong() + okay_response;
-    self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending currentsong response: \n'+ resp + '---');
+//    self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending currentsong response: \n'+ resp + '---');
     client.write(resp);
 };
 
@@ -644,36 +659,7 @@ InterfaceMPD.prototype.handlePlayid = function (sCommand, sParam, client) {
 
 // Handler for command: PLAYLIST
 InterfaceMPD.prototype.handlePlaylist = function (sCommand, sParam, client) {
-  var self = this;
-  var timeStart = Date.now();
-
-  // Fetch queue from CommandRouter
-  self.logStart('Client requests Volumio queue')
-    .then(libFast.bind(self.commRouter.volumioGetQueue, self.commRouter))
-    .then(function (queue) {
-      self.commRouter.pushConsoleMessage('[InterfaceMPD] Received queue: \n'+ JSON.stringify(queue) + '---');
-      // forward queue to helper
-      self.helper.setQueue(queue);
-    }).then(function () {
-      // fetch MPD output from helper
-      let resp = '';
-      if (sParam){
-          resp = self.helper.printPlaylist(sParam);
-          if (resp){
-              resp += okay_response;
-          } else { // song not found in playlist
-              resp = 'ACK [50@0] (' + sCommand + ') song doesn\'t exist: "' + sParam + '"\n';
-          }
-      } else {
-          resp = self.helper.printPlaylist() + okay_response;
-      }
-      self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending playlist response: \n'+ resp + '---');
-      client.write(resp);
-    })
-    .fail(libFast.bind(self.commRouter.pushConsoleMessage, self.commRouter))
-    .done(function () {
-      return self.logDone(timeStart);
-    });
+this.handlePlaylistinfo(sCommand, sParam, client);
 };
 
 // Handler for command: PLAYLISTADD
@@ -711,7 +697,56 @@ InterfaceMPD.prototype.handlePlaylistid = function (sCommand, sParam, client) {
 
 // Handler for command: PLAYLISTINFO
 InterfaceMPD.prototype.handlePlaylistinfo = function (sCommand, sParam, client) {
-  this.handlePlaylist(sCommand, sParam, client);
+    var self = this;
+  var timeStart = Date.now();
+
+  // Fetch queue from CommandRouter
+//  self.logStart('Client requests Volumio queue')
+//    .then(libFast.bind(self.commRouter.volumioGetQueue, self.commRouter))
+//    .then(function (queue) {
+//      self.commRouter.pushConsoleMessage('[InterfaceMPD] Received queue: \n'+ JSON.stringify(queue) + '---');
+//      // forward queue to helper
+//      self.helper.setQueue(queue);
+//    }).then(function () {
+//      // fetch MPD output from helper
+//      let resp = '';
+//      if (sParam){
+//          resp = self.helper.printPlaylist(sParam);
+//          if (resp){
+//              resp += okay_response;
+//          } else { // song not found in playlist
+//              resp = 'ACK [50@0] (' + sCommand + ') song doesn\'t exist: "' + sParam + '"\n';
+//          }
+//      } else {
+//          resp = self.helper.printPlaylist() + okay_response;
+//      }
+//      self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending playlist response: \n'+ resp + '---');
+//      client.write(resp);
+//    })
+//    .fail(libFast.bind(self.commRouter.pushConsoleMessage, self.commRouter))
+//    .done(function () {
+//      return self.logDone(timeStart);
+//    });
+      // assume the local queue info is up to date
+      // fetch MPD output from helper
+    let resp = '';
+    if (sParam){
+        //remove double-quotes
+          if (sParam.charAt(0) === '"' && sParam.charAt(sParam.length -1) === '"')
+          {
+              sParam = sParam.substr(1,sParam.length -2);
+          }
+          resp = self.helper.printPlaylist(sParam);
+          if (resp){
+              resp += okay_response;
+          } else { // song not found in playlist
+              resp = 'ACK [50@0] (' + sCommand + ') song doesn\'t exist: "' + sParam + '"\n';
+          }
+      } else {
+          resp = self.helper.printPlaylist() + okay_response;
+      }
+      self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending playlistinfo ' + sParam + ' response: \n'+ resp + '---');
+      client.write(resp);
 };
 
 // Handler for command: PLAYLISTMOVE
@@ -914,7 +949,7 @@ InterfaceMPD.prototype.handleStatus = function (sCommand, sParam, client) {
     let self = this;    
     // Status should be up to date from the last pushState() call
     let resp = self.helper.printStatus() + okay_response;
-    self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending status response: \n'+ resp + '---');
+//    self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending status response: \n'+ resp + '---');
     client.write(resp);
 };
 
@@ -1082,7 +1117,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
   var self = this;
   var toSocket = '';
   if (socket) { toSocket = ' in response to request by client.'; }
-  self.commRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::pushState ' + JSON.stringify(state) + toSocket);
+  self.commRouter.pushConsoleMessage('[InterfaceMPD] pushState ' + JSON.stringify(state) + toSocket);
 
   // if requested by client, respond
   if (socket) {
@@ -1095,7 +1130,16 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
     }
     self.helper.setStatus(state);
     self.helper.setSong(state);
+    self.commRouter.pushConsoleMessage('[InterfaceMPD] new status\n' + self.helper.printStatus(state));
+    self.commRouter.pushConsoleMessage('[InterfaceMPD] new song\n' + self.helper.printSong(state));
 
+    // for now also just get the queue
+//    libFast.bind(self.commRouter.volumioGetQueue, self.commRouter)
+//    .then(function (queue) {
+//      self.commRouter.pushConsoleMessage('[InterfaceMPD] Received queue: \n'+ JSON.stringify(queue) + '---');
+//      // forward queue to helper
+//      self.helper.setQueue(queue);
+//    });
     // broadcast state changed to all idlers
     self.idles.forEach(function (client) {
       client.write('changed: playlist\nchanged: player\n' + okay_response);

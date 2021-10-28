@@ -225,8 +225,10 @@ module.exports = {
   // Give MPD output of queue
   printPlaylist: function (pos) {
     var output = '';
-    if (pos  && (pos < status.playlistlength)) {
-        output += printArray(queue[pos]);
+    if (pos) { 
+        if (pos < status.playlistlength) {
+            output += printArray(queue[pos]);
+        }
     } else {
         queue.forEach(function (track) {
           output += printArray(track);
@@ -320,6 +322,7 @@ module.exports = {
   // Set the Song from Volumio state
   setSong: function (vState) {
     // copy values
+    if (vState.uri) currentSong.file = vState.uri;
     if (vState.artist) currentSong.Artist = vState.artist;
     if (vState.title) currentSong.Title = vState.title;
     if (vState.position) currentSong.Pos = vState.position;
