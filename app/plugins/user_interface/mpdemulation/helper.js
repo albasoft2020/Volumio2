@@ -151,6 +151,7 @@ var status = { // default format, fill with real data
   songid: 0,
   time: '0:0',
   elapsed: 0.000,
+  duration: 0,
   bitrate: 0,
   audio: '00000:00:0',
   nextsong: 0,
@@ -181,7 +182,11 @@ var currentSong = {
     "Title":"",
     "Pos":"4",
     "Id":"26"
-}
+};
+
+var ID = -1;
+
+var songStartTime = 0;
 
 var queue = []; // hold playlistFiles (given by commandRouter)
 
@@ -245,6 +250,15 @@ module.exports = {
 
     return printArray(status);
   },
+  
+  // Print mpd output of status with correct elapsed time
+    printStatusElapsed: function () {
+        let elapsed = (Date.now() - songStartTime)/1000;
+        status.elapsed = elapsed; // time elapsed
+        status.time = Math.round(elapsed) + ':' + status.duration; // song time
+
+    return printArray(status);
+  },
 
   // Give MPD output of stats
   printStats: function () {
@@ -264,27 +278,28 @@ module.exports = {
   // ======================== SETTERS (called from outside)
 
   // Set the Status
-  setStatus: function (message) {
+  setStatus: function (vState) {
     // copy values
-    status.state = message.status;	// playstate
-    status.song = message.position; // song nr in playlist
-    // message.dynamictitle unhandled
-    status.elapsed = message.seek/1000; // time elapsed
-    status.time = Math.round(status.elapsed) + ':' + message.duration; // song time
+    status.state = vState.status;	// playstate
+    status.song = vState.position; // song nr in playlist
+    // vState.dynamictitle unhandled
+    status.elapsed = vState.seek/1000; // time elapsed
+    status.time = Math.round(status.elapsed) + ':' + vState.duration; // song time
+    status.duration = vState.duration;
     let sr = '', bd = '';
-    if (message.samplerate) sr = message.samplerate.split(" ")[0]*1000;  //sample rate in Hz
-    if (message.bitdepth) bd = message.bitdepth.split(" ")[0];
-    status.audio = sr + ':' + bd + ':' + message.channels; // (44000:24:2) default
-    // message.service unhandled
+    if (vState.samplerate) sr = vState.samplerate.split(" ")[0]*1000;  //sample rate in Hz
+    if (vState.bitdepth) bd = vState.bitdepth.split(" ")[0];
+    status.audio = sr + ':' + bd + ':' + vState.channels; // (44000:24:2) default
+    // vState.service unhandled
 
     // Return a resolved empty promise to represent completion
     return libQ.resolve();
   },
   
     // Set the Status by copying status and possibly adjusting for offset and updating duraton
-  copyStatus: function (message, offset, duration) {
-    // copy values
-    status = Object.assign({}, message);
+  copyStatus: function (mpdState, offset, duration) {
+    // copy the whole state object (assumed to come straight from mpd!)
+    status = Object.assign({}, mpdState);
     if (offset || duration){
         if (offset) status.elapsed = Math.round((status.elapsed-offset)*1000)/1000;
         let nDur = 0;
@@ -296,39 +311,29 @@ module.exports = {
         }
         status.time = Math.round(status.elapsed) + ':' + nDur;
     }
-//    status.volume = message.volume;
-//    status.repeat = message.repeat;
-//    status.random = message.random;
-//    status.single = message.single;
-//    status.consume = message.consume;
-//    status.playlist = message.playlist;
-//    status.playlistlength = message.playlistlength;
-//    status.mixrampdb = message.mixrampdb;
-//    status.state = message.state;	// playstate
-//    status.song = message.song; // song nr in playlist
-//    status.elapsed = message.elapsed; // time elapsed
-//    status.duration = message.duration; // track duration
-//    //status.time = Math.round(status.elapsed) + ':' + message.time.split(':')[1]; // song time
-//    status.songid = message.songid;
-//    status.bitrate = message.bitrate;
-//    status.audio = message.audio; // (44000:24:2) default
-//    // message.service unhandled
-    //  nextsong: 0,
-    //  nextsongid: 0
-
     // Return a resolved empty promise to represent completion
     return libQ.resolve();
   },
+  
   // Set the Song from Volumio state
   setSong: function (vState) {
+      let isNewSong = false;
     // copy values
     if (vState.uri) currentSong.file = vState.uri;
-    if (vState.artist) currentSong.Artist = vState.artist;
-    if (vState.title) currentSong.Title = vState.title;
-    if (vState.position) currentSong.Pos = vState.position;
-    if (vState.album) currentSong.Album = vState.album;
+    if ((vState.artist !== null) && (currentSong.Artist !== vState.artist)) { 
+        currentSong.Artist = vState.artist;
+        isNewSong = true;
+    }
+    if ((vState.title !== null) && (currentSong.Title !== vState.title)) {
+        currentSong.Title = vState.title;
+        isNewSong = true;
+    }
+    if (vState.position !== null) currentSong.Pos = vState.position;
+    if (vState.album !== null) currentSong.Album = vState.album;
+    //
+    songStartTime = Date.now();
     // Return a resolved empty promise to represent completion
-    return libQ.resolve();
+    return libQ.resolve(isNewSong);
   },
   
     // Set the current song by copying mpd song
@@ -338,6 +343,14 @@ module.exports = {
 
     // Return a resolved empty promise to represent completion
     return libQ.resolve();
+  },
+  
+  assignSongId: function () {
+      ID++;
+      currentSong.Id = ID;
+      status.songid = ID;
+      // should also set this in the queue
+      return ID;
   },
   
   // Set the queue

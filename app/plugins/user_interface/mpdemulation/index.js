@@ -226,7 +226,7 @@ function InterfaceMPD (context) {
 InterfaceMPD.prototype.handleMessage = function (message, socket) {
   var self = this;
   
-    if (debug) { self.commRouter.pushConsoleMessage('[InterfaceMPD] Incoming command: ' + message); };
+//    if (debug) { self.commRouter.pushConsoleMessage('[InterfaceMPD] Incoming command: ' + message); };
   // some vars to help extract command/parameters from line
   var nSpaceLocation = 0;
   var sCommand = '';
@@ -257,7 +257,7 @@ InterfaceMPD.prototype.handleMessage = function (message, socket) {
     if (handler) { 
         self.commRouter.pushConsoleMessage('[InterfaceMPD] Received command "' + sCommand + '" with parameter ' + sParam);
         handler.call(self, sCommand, sParam, socket); 
-    } else { self.commRouter.pushConsoleMessage('default'); }
+    } else { self.commRouter.pushConsoleMessage('[InterfaceMPD] no handler for command ' + sCommand); }
   }
 };
 
@@ -740,7 +740,8 @@ InterfaceMPD.prototype.handlePlaylistinfo = function (sCommand, sParam, client) 
           if (resp){
               resp += okay_response;
           } else { // song not found in playlist
-              resp = 'ACK [50@0] (' + sCommand + ') song doesn\'t exist: "' + sParam + '"\n';
+              //resp = 'ACK [50@0] (' + sCommand + ') song doesn\'t exist: "' + sParam + '"\n';
+              resp = okay_response;
           }
       } else {
           resp = self.helper.printPlaylist() + okay_response;
@@ -948,7 +949,7 @@ InterfaceMPD.prototype.handleStats = function (sCommand, sParam, client) {
 InterfaceMPD.prototype.handleStatus = function (sCommand, sParam, client) {
     let self = this;    
     // Status should be up to date from the last pushState() call
-    let resp = self.helper.printStatus() + okay_response;
+    let resp = self.helper.printStatusElapsed() + okay_response;
 //    self.commRouter.pushConsoleMessage('[InterfaceMPD] Sending status response: \n'+ resp + '---');
     client.write(resp);
 };
@@ -1129,9 +1130,11 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
         // get full mpd data from real mpd
     }
     self.helper.setStatus(state);
-    self.helper.setSong(state);
-    self.commRouter.pushConsoleMessage('[InterfaceMPD] new status\n' + self.helper.printStatus(state));
-    self.commRouter.pushConsoleMessage('[InterfaceMPD] new song\n' + self.helper.printSong(state));
+    if (self.helper.setSong(state)) {
+       self.helper.assignSongId();     
+    };
+    self.commRouter.pushConsoleMessage('[InterfaceMPD] new status\n' + self.helper.printStatus());
+    self.commRouter.pushConsoleMessage('[InterfaceMPD] new song\n' + self.helper.printSong());
 
     // for now also just get the queue
 //    libFast.bind(self.commRouter.volumioGetQueue, self.commRouter)
