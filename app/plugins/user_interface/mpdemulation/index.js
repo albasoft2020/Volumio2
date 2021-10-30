@@ -1130,8 +1130,10 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
         // get full mpd data from real mpd
     }
     self.helper.setStatus(state);
-    if (self.helper.setSong(state)) {
-       self.helper.assignSongId();     
+    if (self.helper.setSong(state)) {  // song has changed
+       self.helper.assignSongId();   
+       // cheat for now: should get the actual queue!
+       self.helper.setQueue([state]);
     };
     self.commRouter.pushConsoleMessage('[InterfaceMPD] new status\n' + self.helper.printStatus());
     self.commRouter.pushConsoleMessage('[InterfaceMPD] new song\n' + self.helper.printSong());
@@ -1144,6 +1146,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
 //      self.helper.setQueue(queue);
 //    });
     // broadcast state changed to all idlers
+    self.commRouter.pushConsoleMessage('[InterfaceMPD] broadcasting to ' + self.idles.length + ' idlers.');
     self.idles.forEach(function (client) {
       client.write('changed: playlist\nchanged: player\n' + okay_response);
     });

@@ -253,10 +253,11 @@ module.exports = {
   
   // Print mpd output of status with correct elapsed time
     printStatusElapsed: function () {
-        let elapsed = (Date.now() - songStartTime)/1000;
-        status.elapsed = elapsed; // time elapsed
-        status.time = Math.round(elapsed) + ':' + status.duration; // song time
-
+        if (status.state === 'play') {// playing, so update elapsed time
+            let elapsed = (Date.now() - songStartTime)/1000;
+            status.elapsed = elapsed; // time elapsed
+            status.time = Math.round(elapsed) + ':' + status.duration; // song time
+        }
     return printArray(status);
   },
 
