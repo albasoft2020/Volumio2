@@ -1,10 +1,12 @@
 'use strict';
 
 var net = require('net');
-//var libMpd = require('../music_service/mpd/lib/mpd.js');
+var libMpd = require('../../music_service/mpd/lib/mpd.js');
 var libQ = require('kew');
 var libFast = require('fast.js');
 var okay_response = 'OK\n';
+var MPD_SENTINEL = /^(OK|ACK|list_OK)(.*)$/m,
+	OK_MPD = /^OK MPD /;
 
 // MPD info for emulation
 var mpdPort = 6500;
@@ -128,13 +130,16 @@ function InterfaceMPD (context) {
 
   self.context = context;
   self.commandRouter = self.context.coreCommand;
+  self.logger = self.commandRouter.logger;
 
   // helpers
   self.helper = require('./helper.js');
   self.idles = [];
   self.loadCommandHandlers();
   self.currentClients = [];
-  
+  self.mpdCommand = '';
+  self.mpdCmdQueue = [];
+  self.buffer = '';
   self.mpdDataHandler = self.mpdDataToClient;
 
   // create server
@@ -177,7 +182,7 @@ function InterfaceMPD (context) {
   protocolServer.on('error', function (err) {
     if (err.code === 'EADDRINUSE') {
       // address is in use
-      self.commandRouter.pushConsoleMessage('Failed to bind MPD protocol to port ' + mpdPort +
+      self.logger.info('Failed to bind MPD protocol to port ' + mpdPort +
 				': Address in use.');
     } else {
       throw err;
@@ -187,7 +192,7 @@ function InterfaceMPD (context) {
     // Socket to provide a connection to the actual mpd
     self.serviceSocket = new net.Socket();
     self.serviceSocket.connect(remoteport, remoteaddr, function () {
-        if (debug) { self.commandRouter.pushConsoleMessage('[InterfaceMPD] cennected to real MPD'); };
+        if (debug) { self.logger.info('[InterfaceMPD] cennected to real MPD'); };
     });
 //    // keep it alive
 //    // Feels a bit like a cheat, but so far I have not fund a reliable way to reconnect after it has been closed
@@ -195,39 +200,86 @@ function InterfaceMPD (context) {
 //    self.serviceSocket.setKeepAlive(true);
 
     self.serviceSocket.on('data', function (data) {
-        if (debug) { self.commandRouter.pushConsoleMessage('[InterfaceMPD] received real MPD data:\n' + data); };
-        let dstr = data.toString();
-        let client;
-        if (dstr.startsWith('OK MPD')) {
-            if (dstr.indexOf('\n') > -1) { 
-                dstr = dstr.substr(dstr.indexOf('\n')+1); 
-                if (dstr.length <= 0) {
-                    // do nothing (this was just the re-connect version message of mpd)
-                    return;                 
-                }                    
-            } 
-        } 
-        let handler = self.mpdDataHandler;
-        handler.call(self, dstr);
-        //self.mpdDataToClient(dstr);
+//        if (debug) { self.logger.info('[InterfaceMPD] received real MPD data:\n' + data); };
+//        let dstr = data.toString();
+//        let client;
+//        if (dstr.startsWith('OK MPD')) {
+//            if (dstr.indexOf('\n') > -1) { 
+//                dstr = dstr.substr(dstr.indexOf('\n')+1); 
+//                if (dstr.length <= 0) {
+//                    // do nothing (this was just the re-connect version message of mpd)
+//                    return;                 
+//                }                    
+//            } 
+//        } 
+//        let handler = self.mpdDataHandler;
+//        if (handler) { handler.call(self, dstr); };
+//        //self.mpdDataToClient(dstr);
+        self.receiveMpdResponse(data);
     });
     
     self.serviceSocket.on('error', function (error) {
-        self.commandRouter.pushConsoleMessage('[InterfaceMPD]  mpd error: ' + error);
+        self.logger.error('[InterfaceMPD]  mpd error: ' + error);
       });
 
     self.serviceSocket.on('end', function () {
-        if (debug) { self.commandRouter.pushConsoleMessage('[InterfaceMPD]  disconnected from mpd'); };
+        if (debug) { self.logger.info('[InterfaceMPD]  disconnected from mpd'); };
       });
 }
 
 // ================================ INTERNAL FUNCTIONS
 
+InterfaceMPD.prototype.receiveMpdResponse = function (data) {
+  var m;
+  this.buffer += data;
+  while (m = this.buffer.match(MPD_SENTINEL)) {
+    var msg = this.buffer.substring(0, m.index),
+        line = m[0],
+        code = m[1],
+        str = m[2];
+    if (code === 'ACK') {
+        //var err = new Error(str);
+        this.logger.error('[InterfaceMPD]  mpd error: ' + str);
+        this.currentClients.shift();
+    } else if (OK_MPD.test(line)) {
+        if (debug) { this.logger.info('[InterfaceMPD] Inital connection response: ' + line); };
+    } else {
+        this.handleMpdResponse(msg);
+    }
+    this.buffer = this.buffer.substring(msg.length + line.length + 1);
+  }
+};
+
+InterfaceMPD.prototype.handleMpdResponse = function (data) {
+    let self = this;
+    let cmd = self.mpdCmdQueue.shift();
+    if (cmd) {
+        if (cmd === 'client') {
+            let client = self.currentClients.shift();
+            if (debug) { self.logger.info('[InterfaceMPD] Sending data to client. Remaining clients ' + self.currentClients.length); };
+            if (client) client.write(data); 
+        } else {
+            self.logger.info('[InterfaceMPD] received data for '+ cmd + ' command for internal use. Remaining Q: '+ self.mpdCmdQueue.length); 
+            if (cmd === 'playlistinfo') {
+                if (data) {
+//                    let q = self.libMdp.parseArrayMessage(data);
+//                    if (debug) { self.logger.info('[InterfaceMPD] Playlist\n' + JSON.stringify(q)); };
+                    if (debug) { self.logger.info('[InterfaceMPD] Playlist data\n' + data); };
+                 }
+            } else if (cmd === 'status') {
+                self.helper.copyStatus(self.libMdp.parseKeyValueMessage(data));
+            }
+        } 
+    } else {
+        this.logger.error('[InterfaceMPD]  mpd command queue error: empty queue');        
+    }
+};
+
 // Incoming message handler
 InterfaceMPD.prototype.handleMessage = function (message, socket) {
   var self = this;
   
-//    if (debug) { self.commandRouter.pushConsoleMessage('[InterfaceMPD] Incoming command: ' + message); };
+//    if (debug) { self.logger.info('[InterfaceMPD] Incoming command: ' + message); };
   // some vars to help extract command/parameters from line
   var nSpaceLocation = 0;
   var sCommand = '';
@@ -244,7 +296,7 @@ InterfaceMPD.prototype.handleMessage = function (message, socket) {
     sParam = message.substring(nSpaceLocation + 1, message.length);
   }
 
-  // self.commandRouter.pushConsoleMessage('Incoming command: ' + sCommand + '\nParam: '+sParam);
+  // self.logger.info('Incoming command: ' + sCommand + '\nParam: '+sParam);
   if (sCommand == 'command_list_begin') {
     okay_response = '';
   } else if (sCommand == 'command_list_ok_begin') {
@@ -256,9 +308,9 @@ InterfaceMPD.prototype.handleMessage = function (message, socket) {
   } else {
     var handler = self.commandHandlers[sCommand];
     if (handler) { 
-        self.commandRouter.pushConsoleMessage('[InterfaceMPD] Received command "' + sCommand + '" with parameter ' + sParam);
+        self.logger.info('[InterfaceMPD] Received command "' + sCommand + '" with parameter ' + sParam);
         handler.call(self, sCommand, sParam, socket); 
-    } else { self.commandRouter.pushConsoleMessage('[InterfaceMPD] no handler for command ' + sCommand); }
+    } else { self.logger.info('[InterfaceMPD] no handler for command ' + sCommand); }
   }
 };
 
@@ -268,11 +320,19 @@ InterfaceMPD.prototype.handleThroughRealMPD = function (sCommand, sParam, client
     var self = this;
     let cmd = sCommand;
     if (sParam) { cmd += ' ' + sParam; };
-    // Add client to the list
-    self.currentClients.push(client);  
-    // send the actual command
+    if (client) {
+        // Add client to the list
+        self.currentClients.push(client); 
+        self.mpdDataHandler = self.mpdDataToClient;
+        self.mpdCmdQueue.push('client');
+    } else {
+        self.mpdCommand = sCommand;
+        self.mpdCmdQueue.push(sCommand);
+        self.mpdDataHandler = self.mpdDataforInternalState;
+    }
+    // send the actual command after checking that mpd is ready
     self.mpdSocketReady().then( () => { 
-        if (debug) { self.commandRouter.pushConsoleMessage('[InterfaceMPD] Command "' + cmd + '" passed on to real MPD'); };
+        if (debug) { self.logger.info('[InterfaceMPD] Command "' + cmd + '" passed on to real MPD'); };
         self.serviceSocket.write(cmd + '\n'); 
     } );
 };
@@ -281,18 +341,18 @@ InterfaceMPD.prototype.mpdSocketReady = function () {
     var self = this;
     var defer = libQ.defer();
 
-    if (debug) { self.commandRouter.pushConsoleMessage('[InterfaceMPD] Checking if real MPD is ready: ' + self.serviceSocket.readyState); };
+    if (debug) { self.logger.info('[InterfaceMPD] Checking if real MPD is ready: ' + self.serviceSocket.readyState); };
 
     if (self.serviceSocket) {
         if (self.serviceSocket.readyState == 'open') { 
-            if (debug) { self.commandRouter.pushConsoleMessage('[InterfaceMPD] connection to real MPD is already open'); };
+            if (debug) { self.logger.info('[InterfaceMPD] connection to real MPD is already open'); };
             defer.resolve(true);
             return defer.promise;
         }
     } 
     self.serviceSocket.connect(remoteport, remoteaddr, function () {
         defer.resolve(true); 
-        if (debug) { self.commandRouter.pushConsoleMessage('[InterfaceMPD] connection to real MPD ready'); };
+        if (debug) { self.logger.info('[InterfaceMPD] connection to real MPD ready'); };
     });
     return defer.promise;
 };
@@ -300,25 +360,32 @@ InterfaceMPD.prototype.mpdSocketReady = function () {
 InterfaceMPD.prototype.mpdDataToClient = function (data) {
     let self = this;
     let client = self.currentClients.shift();
+    if (debug) { self.logger.info('[InterfaceMPD] Sending data to client. Remaining clients ' + self.currentClients.length); };
     if (client) client.write(data); 
 };
 
 InterfaceMPD.prototype.mpdDataforInternalState = function (data) {
     let self = this;
-//    let client = self.currentClients.shift();
-//    if (client) client.write(data); 
+    let dstr = data.toString();
+    
+    self.logger.info('[InterfaceMPD] received data for '+ self.mpdCommand + ' command for internal use.'); 
+    if (self.mpdCommand === 'playlistinfo') {
+//
+    } else if (self.mpdCommand === 'status') {
+        self.helper.copyStatus(self.libMdp.parseKeyValueMessage(dstr));
+    } 
 };
 
 
 InterfaceMPD.prototype.logDone = function (timeStart) {
   var self = this;
-  self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + '------------------------------ ' + (Date.now() - timeStart) + 'ms');
+  self.logger.info('[' + Date.now() + '] ' + '------------------------------ ' + (Date.now() - timeStart) + 'ms');
   return libQ.resolve();
 };
 
 InterfaceMPD.prototype.logStart = function (sCommand) {
   var self = this;
-  self.commandRouter.pushConsoleMessage('\n' + '[' + Date.now() + '] ' + '---------------------------- ' + sCommand);
+  self.logger.info('\n' + '[' + Date.now() + '] ' + '---------------------------- ' + sCommand);
   return libQ.resolve();
 };
 
@@ -408,7 +475,7 @@ InterfaceMPD.prototype.handleCrossfade = function (sCommand, sParam, client) {
 InterfaceMPD.prototype.handleCurrentsong = function (sCommand, sParam, client) {
     var self = this;
     let resp = self.helper.printSong() + okay_response;
-//    self.commandRouter.pushConsoleMessage('[InterfaceMPD] Sending currentsong response: \n'+ resp + '---');
+//    self.logger.info('[InterfaceMPD] Sending currentsong response: \n'+ resp + '---');
     client.write(resp);
 };
 
@@ -485,7 +552,7 @@ InterfaceMPD.prototype.handleListall = function (sCommand, sParam, client) {
     .then(function (library) {
       self.pushLibrary.call(self, library, client);
     })
-    .fail(libFast.bind(self.commandRouter.pushConsoleMessage, self.commandRouter))
+    .fail(libFast.bind(self.logger.error, self.commandRouter))
     .done(function () {
       // Respond with default 'OK'
       client.write(okay_response);
@@ -578,7 +645,7 @@ InterfaceMPD.prototype.handleNext = function (sCommand, sParam, client) {
   // send Next command to CommandRouter
   self.logStart('Client requests Volumio next')
     .then(libFast.bind(self.commandRouter.volumioNext, self.commandRouter))
-    .fail(libFast.bind(self.commandRouter.pushConsoleMessage, self.commandRouter))
+    .fail(libFast.bind(self.logger.error, self.commandRouter))
     .done(function () {
       return self.logDone(timeStart);
     });
@@ -617,7 +684,7 @@ InterfaceMPD.prototype.handlePause = function (sCommand, sParam, client) {
   // Send pause command to CommandRouter
   self.logStart('Client requests Volumio pause')
     .then(libFast.bind(self.commandRouter.volumioPause, self.commandRouter))
-    .fail(libFast.bind(self.commandRouter.pushConsoleMessage, self.commandRouter))
+    .fail(libFast.bind(self.logger.error, self.commandRouter))
     .done(function () {
       return self.logDone(timeStart);
     });
@@ -644,7 +711,7 @@ InterfaceMPD.prototype.handlePlay = function (sCommand, sParam, client) {
     .then(function (state) {
       if (state.status == 'play') { self.commandRouter.volumioPause.call(self.commandRouter); } else { self.commandRouter.volumioPlay.call(self.commandRouter); }
     })
-    .fail(libFast.bind(self.commandRouter.pushConsoleMessage, self.commandRouter))
+    .fail(libFast.bind(self.logger.error, self.commandRouter))
     .done(function () {
       return self.logDone(timeStart);
     });
@@ -706,7 +773,7 @@ InterfaceMPD.prototype.handlePlaylistinfo = function (sCommand, sParam, client) 
 //  self.logStart('Client requests Volumio queue')
 //    .then(libFast.bind(self.commandRouter.volumioGetQueue, self.commandRouter))
 //    .then(function (queue) {
-//      self.commandRouter.pushConsoleMessage('[InterfaceMPD] Received queue: \n'+ JSON.stringify(queue) + '---');
+//      self.logger.info('[InterfaceMPD] Received queue: \n'+ JSON.stringify(queue) + '---');
 //      // forward queue to helper
 //      self.helper.setQueue(queue);
 //    }).then(function () {
@@ -722,10 +789,10 @@ InterfaceMPD.prototype.handlePlaylistinfo = function (sCommand, sParam, client) 
 //      } else {
 //          resp = self.helper.printPlaylist() + okay_response;
 //      }
-//      self.commandRouter.pushConsoleMessage('[InterfaceMPD] Sending playlist response: \n'+ resp + '---');
+//      self.logger.info('[InterfaceMPD] Sending playlist response: \n'+ resp + '---');
 //      client.write(resp);
 //    })
-//    .fail(libFast.bind(self.commandRouter.pushConsoleMessage, self.commandRouter))
+//    .fail(libFast.bind(self.logger.error, self.commandRouter))
 //    .done(function () {
 //      return self.logDone(timeStart);
 //    });
@@ -747,7 +814,7 @@ InterfaceMPD.prototype.handlePlaylistinfo = function (sCommand, sParam, client) 
           }
       } else {  // no parameters: print the whole playlist
           resp = self.helper.printPlaylist() + okay_response;
-          self.commandRouter.pushConsoleMessage('[InterfaceMPD] Sending playlistinfo ' + sParam + ' response: \n'+ resp + '---');
+          self.logger.info('[InterfaceMPD] Sending playlistinfo ' + sParam + ' response: \n'+ resp + '---');
 
       }
       client.write(resp);
@@ -785,7 +852,7 @@ InterfaceMPD.prototype.handlePrevious = function (sCommand, sParam, client) {
   // Send previous command to CommandRouter
   self.logStart('Client requests Volumio previous')
     .then(libFast.bind(self.commandRouter.volumioPrevious, self.commandRouter))
-    .fail(libFast.bind(self.commandRouter.pushConsoleMessage, self.commandRouter))
+    .fail(libFast.bind(self.logger.error, self.commandRouter))
     .done(function () {
       return self.logDone(timeStart);
     });
@@ -953,7 +1020,7 @@ InterfaceMPD.prototype.handleStatus = function (sCommand, sParam, client) {
     let self = this;    
     // Status should be up to date from the last pushState() call
     let resp = self.helper.printStatusElapsed() + okay_response;
-//    self.commandRouter.pushConsoleMessage('[InterfaceMPD] Sending status response: \n'+ resp + '---');
+//    self.logger.info('[InterfaceMPD] Sending status response: \n'+ resp + '---');
     client.write(resp);
 };
 
@@ -965,7 +1032,7 @@ InterfaceMPD.prototype.handleStop = function (sCommand, sParam, client) {
   // Call stop on CommandRouter
   self.logStart('Client requests Volumio stop')
     .then(libFast.bind(self.commandRouter.volumioStop, self.commandRouter))
-    .fail(libFast.bind(self.commandRouter.pushConsoleMessage, self.commandRouter))
+    .fail(libFast.bind(self.logger.error, self.commandRouter))
     .done(function () {
       return self.logDone(timeStart);
     });
@@ -1059,7 +1126,7 @@ InterfaceMPD.prototype.handleVolume = function (sCommand, sParam, client) {
       if (newvolume < 0) { newvolume = 0; }
       return self.commandRouter.volumiosetvolume.call(self.commandRouter, newvolume);
     })
-    .fail(libFast.bind(self.commandRouter.pushConsoleMessage, self.commandRouter))
+    .fail(libFast.bind(self.logger.error, self.commandRouter))
     .done(function () {
       return self.logDone(timeStart);
     });
@@ -1086,7 +1153,7 @@ InterfaceMPD.prototype.printConsoleMessage = function (message) {
 // Receive music library updates from commandRouter and broadcast to all connected clients
 InterfaceMPD.prototype.pushLibrary = function (library, client) {
   var self = this;
-  self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::pushLibrary');
+  self.logger.info('[' + Date.now() + '] ' + 'InterfaceMPD::pushLibrary');
 
   // If a specific client is given, push to just that client
   if (client) {
@@ -1103,7 +1170,7 @@ InterfaceMPD.prototype.pushLibrary = function (library, client) {
 // Receive player queue updates from commandRouter and broadcast to all connected clients
 InterfaceMPD.prototype.pushQueue = function (queue) {
   var self = this;
-  self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'InterfaceMPD::pushQueue');
+  self.logger.info('[' + Date.now() + '] ' + 'InterfaceMPD::pushQueue');
 
   // pass queue to the helper
   self.helper.setQueue(queue);
@@ -1121,7 +1188,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
   var self = this;
   var toSocket = '';
   if (socket) { toSocket = ' in response to request by client.'; }
-  self.commandRouter.pushConsoleMessage('[InterfaceMPD] pushState ' + JSON.stringify(state) + toSocket);
+  self.logger.info('[InterfaceMPD] pushState ' + JSON.stringify(state) + toSocket);
 
   // if requested by client, respond
   if (socket) {
@@ -1131,25 +1198,30 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
     // pass state to the helper
     if (mpdServices.includes(state.service)) {
         // get full mpd data from real mpd
+//        self.logger.info('[InterfaceMPD] Requesting real MPD status');
+//        self.handleThroughRealMPD('status');
+    } else {
+        self.helper.setStatus(state);
     }
-    self.helper.setStatus(state);
     if (self.helper.setSong(state)) {  // song has changed
-       self.helper.assignSongId();   
+       self.helper.assignSongId(mpdServices.includes(state.service));   
        // cheat for now: should get the actual queue!
        self.helper.setQueue([state]);
+       self.logger.info('[InterfaceMPD] Requesting real MPD playlist');
+       self.handleThroughRealMPD('playlistinfo');
     };
-    self.commandRouter.pushConsoleMessage('[InterfaceMPD] new status\n' + self.helper.printStatus());
-    self.commandRouter.pushConsoleMessage('[InterfaceMPD] new song\n' + self.helper.printSong());
+    self.logger.info('[InterfaceMPD] new status\n' + self.helper.printStatus());
+    self.logger.info('[InterfaceMPD] new song\n' + self.helper.printSong());
 
     // for now also just get the queue
 //    libFast.bind(self.commandRouter.volumioGetQueue, self.commandRouter)
 //    .then(function (queue) {
-//      self.commandRouter.pushConsoleMessage('[InterfaceMPD] Received queue: \n'+ JSON.stringify(queue) + '---');
+//      self.logger.info('[InterfaceMPD] Received queue: \n'+ JSON.stringify(queue) + '---');
 //      // forward queue to helper
 //      self.helper.setQueue(queue);
 //    });
     // broadcast state changed to all idlers
-    self.commandRouter.pushConsoleMessage('[InterfaceMPD] broadcasting to ' + self.idles.length + ' idlers.');
+    self.logger.info('[InterfaceMPD] broadcasting to ' + self.idles.length + ' idlers.');
     self.idles.forEach(function (client) {
       client.write('changed: playlist\nchanged: player\n' + okay_response);
     });
@@ -1161,7 +1233,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
 InterfaceMPD.prototype.prepareUpnpPlayback = function () {
   var self = this;
 
-  //self.logger.info('Preparing playback through UPNP');
+  self.logger.info('Preparing playback through UPNP');
 
   // self.commandRouter.volumioStop();
   if (self.commandRouter.stateMachine.isVolatile) {

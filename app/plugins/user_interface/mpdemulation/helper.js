@@ -346,12 +346,14 @@ module.exports = {
     return libQ.resolve();
   },
   
-  assignSongId: function () {
-      ID++;
-      currentSong.Id = ID;
-      status.songid = ID;
+  assignSongId: function (fromStatus) {
+      if (!fromStatus) {
+        ID++;
+        status.songid = ID;
+      }
+      currentSong.Id = status.songid;
       // should also set this in the queue
-      return ID;
+      return status.songid;
   },
   
   // Set the queue
