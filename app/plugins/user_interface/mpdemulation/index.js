@@ -192,7 +192,7 @@ function InterfaceMPD (context) {
     // Socket to provide a connection to the actual mpd
     self.serviceSocket = new net.Socket();
     self.serviceSocket.connect(remoteport, remoteaddr, function () {
-        if (debug) { self.logger.info('[InterfaceMPD] cennected to real MPD'); };
+        if (debug) { self.logger.info('[InterfaceMPD] connected to real MPD'); };
     });
 //    // keep it alive
 //    // Feels a bit like a cheat, but so far I have not fund a reliable way to reconnect after it has been closed
@@ -239,27 +239,32 @@ InterfaceMPD.prototype.receiveMpdResponse = function (data) {
         str = m[2];
     if (code === 'ACK') {
         //var err = new Error(str);
-        this.logger.error('[InterfaceMPD]  mpd error: ' + str);
-        this.currentClients.shift();
+//        this.logger.error('[InterfaceMPD]  mpd error: ' + str);
+//        this.currentClients.shift();
     } else if (OK_MPD.test(line)) {
         if (debug) { this.logger.info('[InterfaceMPD] Inital connection response: ' + line); };
     } else {
-        this.handleMpdResponse(msg);
+        this.handleMpdResponse(msg, line);
     }
     this.buffer = this.buffer.substring(msg.length + line.length + 1);
   }
 };
 
-InterfaceMPD.prototype.handleMpdResponse = function (data) {
+InterfaceMPD.prototype.handleMpdResponse = function (data, termination) {
     let self = this;
     let cmd = self.mpdCmdQueue.shift();
     if (cmd) {
         if (cmd === 'client') {
             let client = self.currentClients.shift();
-            if (debug) { self.logger.info('[InterfaceMPD] Sending data to client. Remaining clients ' + self.currentClients.length); };
-            if (client) client.write(data); 
+            if (debug) { self.logger.info('[InterfaceMPD] Sending data to client. Remaining clients ' + self.currentClients.length + '\n' + data + termination + '---'); };
+            if (client) client.write(data + termination + '\n'); 
+        } else if (termination.startsWith('ACK')) {
+            //var err = new Error(str);
+            self.logger.error('[InterfaceMPD]  mpd error: ' + str);
+            self.currentClients.shift();
         } else {
             self.logger.info('[InterfaceMPD] received data for '+ cmd + ' command for internal use. Remaining Q: '+ self.mpdCmdQueue.length); 
+            if (debug) { self.logger.info('[InterfaceMPD] Q: ' + self.mpdCmdQueue); };
             if (cmd === 'playlistinfo') {
                 if (data) {
 //                    let q = self.libMdp.parseArrayMessage(data);
@@ -1208,7 +1213,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
        // cheat for now: should get the actual queue!
        self.helper.setQueue([state]);
        self.logger.info('[InterfaceMPD] Requesting real MPD playlist');
-       self.handleThroughRealMPD('playlistinfo');
+       if (state.status === 'play') { self.handleThroughRealMPD('playlistinfo'); };
     };
     self.logger.info('[InterfaceMPD] new status\n' + self.helper.printStatus());
     self.logger.info('[InterfaceMPD] new song\n' + self.helper.printSong());
