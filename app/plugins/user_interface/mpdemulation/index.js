@@ -21,6 +21,9 @@ var mpdAddress = '0.0.0.0';
   // Services that are playing through mpd
   var mpdServices = ['mpd', 'webradio', 'upnp'];  //well, upnpn is not really used as service. Did I miss any others?
 
+  // commands for which no debug messages will be printed
+   var ignoreForDebug = ['status', 'currentsong']
+   
 //var mpdDataHandler;
 
 // TODO check if we can move this to the helper and make it GLOBAL?
@@ -141,6 +144,11 @@ function InterfaceMPD (context) {
   self.mpdCmdQueue = [];
   self.buffer = '';
   self.mpdDataHandler = self.mpdDataToClient;
+  
+  // fields use to keep track if a real request is running. If they are true then another update from mpd is requested
+  
+  self.receivedMpdPlaylist = true;
+  self.receivedMpdStatus = true;
 
   // create server
   var protocolServer = net.createServer(function (client) {
@@ -269,11 +277,13 @@ InterfaceMPD.prototype.handleMpdResponse = function (data, termination) {
             self.logger.info('[InterfaceMPD] received data for '+ cmd + ' command for internal use.'); 
             if (cmd === 'playlistinfo') {
                 if (data) {
+                    self.receivedMpdPlaylist = true;
                     let q = libMpd.parseArrayMessage(data);
                     self.helper.copyQueue(q);
                     if (debug) { self.logger.info(JSON.stringify(q)); };
                }
             } else if (cmd === 'status') {
+                self.receivedMpdStatus = true;
                 self.helper.copyStatus(libMpd.parseKeyValueMessage(data));
                 self.logger.info('[InterfaceMPD] new status\n' + self.helper.printStatus());
             }
@@ -323,7 +333,7 @@ InterfaceMPD.prototype.handleMessage = function (message, socket) {
   } else {
     var handler = self.commandHandlers[sCommand];
     if (handler) { 
-        if (sCommand === 'status') {
+        if (ignoreForDebug.includes(sCommand)) {
 //            self.logger.info('[InterfaceMPD] Received command "' + sCommand + '" with parameter ' + sParam);            
         } else {
             self.logger.info('[InterfaceMPD] Received command "' + sCommand + '" with parameter ' + sParam);
@@ -1219,6 +1229,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
         // get full mpd data from real mpd
         self.logger.info('[InterfaceMPD] Requesting real MPD status');
         self.handleThroughRealMPD('status');
+        self.receivedMpdStatus = false;
 //        self.helper.setStatus(state);
     } else {
         self.helper.setStatus(state);
@@ -1230,9 +1241,11 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
        // cheat for now: should get the actual queue!
 //       self.helper.setQueue([state]);
        if (state.status === 'play') { 
-            if (mpdServices.includes(state.service)) {
+            if (mpdServices.includes(state.service) && self.receivedMpdPlaylist) {
                 self.logger.info('[InterfaceMPD] Requesting real MPD playlist');
-                self.handleThroughRealMPD('playlistinfo'); 
+                self.receivedMpdPlaylist = false;
+                // delay requesting playlist a bit 
+                setTimeout( () => { self.handleThroughRealMPD('playlistinfo'); }, 500); 
             }
         };
     };
