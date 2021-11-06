@@ -24,7 +24,6 @@ var mpdAddress = '0.0.0.0';
   // commands for which no debug messages will be printed
    var ignoreForDebug = ['status', 'currentsong', 'playlistinfo'];
    
-//var mpdDataHandler;
 
 // TODO check if we can move this to the helper and make it GLOBAL?
 const command = { // List of all MPD commands
@@ -143,7 +142,6 @@ function InterfaceMPD (context) {
   self.mpdCommand = '';
   self.mpdCmdQueue = [];
   self.buffer = '';
-  self.mpdDataHandler = self.mpdDataToClient;
   
   // fields use to keep track if a real request is running. If they are true then another update from mpd is requested
   
@@ -207,24 +205,7 @@ function InterfaceMPD (context) {
 //    // mpdSocketReady() still sometimes leads to crashes it is has to re-establish a connection
 //    self.serviceSocket.setKeepAlive(true);
 
-    self.serviceSocket.on('data', function (data) {
-//        if (debug) { self.logger.info('[InterfaceMPD] received real MPD data:\n' + data); };
-//        let dstr = data.toString();
-//        let client;
-//        if (dstr.startsWith('OK MPD')) {
-//            if (dstr.indexOf('\n') > -1) { 
-//                dstr = dstr.substr(dstr.indexOf('\n')+1); 
-//                if (dstr.length <= 0) {
-//                    // do nothing (this was just the re-connect version message of mpd)
-//                    return;                 
-//                }                    
-//            } 
-//        } 
-//        let handler = self.mpdDataHandler;
-//        if (handler) { handler.call(self, dstr); };
-//        //self.mpdDataToClient(dstr);
-        self.receiveMpdResponse(data);
-    });
+    self.serviceSocket.on('data', (data) => { self.receiveMpdResponse(data); } );
     
     self.serviceSocket.on('error', function (error) {
         self.logger.error('[InterfaceMPD]  mpd error: ' + error);
@@ -351,13 +332,11 @@ InterfaceMPD.prototype.handleThroughRealMPD = function (sCommand, sParam, client
     if (sParam) { cmd += ' ' + sParam; };
     if (client) {
         // Add client to the list
-        self.currentClients.push(client); 
-        self.mpdDataHandler = self.mpdDataToClient;
+        self.currentClients.push(client);
         self.mpdCmdQueue.push('client:'+sCommand);
     } else {
         self.mpdCommand = sCommand;
         self.mpdCmdQueue.push(sCommand);
-        self.mpdDataHandler = self.mpdDataforInternalState;
     }
     // send the actual command after checking that mpd is ready
     self.mpdSocketReady().then( () => { 
@@ -385,26 +364,6 @@ InterfaceMPD.prototype.mpdSocketReady = function () {
     });
     return defer.promise;
 };
-
-InterfaceMPD.prototype.mpdDataToClient = function (data) {
-    let self = this;
-    let client = self.currentClients.shift();
-    if (debug) { self.logger.info('[InterfaceMPD] Sending data to client. Remaining clients ' + self.currentClients.length); };
-    if (client) client.write(data); 
-};
-
-InterfaceMPD.prototype.mpdDataforInternalState = function (data) {
-    let self = this;
-    let dstr = data.toString();
-    
-    self.logger.info('[InterfaceMPD] received data for '+ self.mpdCommand + ' command for internal use.'); 
-    if (self.mpdCommand === 'playlistinfo') {
-//
-    } else if (self.mpdCommand === 'status') {
-        self.helper.copyStatus(self.libMdp.parseKeyValueMessage(dstr));
-    } 
-};
-
 
 InterfaceMPD.prototype.logDone = function (timeStart) {
   var self = this;
