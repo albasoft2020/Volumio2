@@ -330,16 +330,16 @@ InterfaceMPD.prototype.handleThroughRealMPD = function (sCommand, sParam, client
     var self = this;
     let cmd = sCommand;
     if (sParam) { cmd += ' ' + sParam; };
-    if (client) {
-        // Add client to the list
-        self.currentClients.push(client);
-        self.mpdCmdQueue.push('client:'+sCommand);
-    } else {
-        self.mpdCommand = sCommand;
-        self.mpdCmdQueue.push(sCommand);
-    }
     // send the actual command after checking that mpd is ready
     self.mpdSocketReady().then( () => { 
+        if (client) {
+            // Add client to the list
+            self.currentClients.push(client);
+            self.mpdCmdQueue.push('client:'+sCommand);
+        } else {
+            self.mpdCommand = sCommand;
+            self.mpdCmdQueue.push(sCommand);
+        }
         if (debug) { self.logger.info('[InterfaceMPD] Command "' + cmd + '" passed on to real MPD'); };
         self.serviceSocket.write(cmd + '\n'); 
     } );
