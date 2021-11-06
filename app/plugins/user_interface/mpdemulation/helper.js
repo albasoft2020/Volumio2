@@ -350,9 +350,9 @@ module.exports = {
       if (!fromStatus) {
         ID++;
         status.songid = ID;
+        // should also set this in the queue
       }
-      currentSong.Id = status.songid;
-      // should also set this in the queue
+      if (status.songid > 0) currentSong.Id = status.songid;
       return status.songid;
   },
   

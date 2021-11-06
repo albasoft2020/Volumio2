@@ -22,7 +22,7 @@ var mpdAddress = '0.0.0.0';
   var mpdServices = ['mpd', 'webradio', 'upnp'];  //well, upnpn is not really used as service. Did I miss any others?
 
   // commands for which no debug messages will be printed
-   var ignoreForDebug = ['status', 'currentsong']
+   var ignoreForDebug = ['status', 'currentsong', 'playlistinfo'];
    
 //var mpdDataHandler;
 
@@ -265,7 +265,7 @@ InterfaceMPD.prototype.handleMpdResponse = function (data, termination) {
     if (cmd) {
         if (cmd.startsWith('client')) {
             let client = self.currentClients.shift();
-            if (debug) { self.logger.info('[InterfaceMPD] Sending data to client. Remaining clients ' + self.currentClients.length + '\n' + data + termination); };
+            if (debug) { self.logger.info('[InterfaceMPD] Sending response to ' + cmd.split(':')[1] + ' to client. Remaining clients ' + self.currentClients.length + '\n' + data + termination); };
             if (client) {
                 try {
                     client.write(data + termination + '\n'); 
@@ -681,6 +681,16 @@ InterfaceMPD.prototype.handleNext = function (sCommand, sParam, client) {
 
   // Respond with default 'OK'
   client.write(okay_response);
+};
+
+// Handler for command: NOIDLE
+InterfaceMPD.prototype.handleNoIdle = function (sCommand, sParam, client) {
+    var self = this;
+
+    // remove client from idle list
+    self.idles.shift(client);
+    // Should do this better! There could be different clients connected...
+    client.write(okay_response);
 };
 
 // Handler for command: NOTCOMMANDS
@@ -1225,6 +1235,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
     // else broadcast to all idlers
   } else {
     // pass state to the helper
+    self.helper.setStatus(state);
     if (mpdServices.includes(state.service)) {
         // get full mpd data from real mpd
         self.logger.info('[InterfaceMPD] Requesting real MPD status');
@@ -1232,9 +1243,7 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
         self.receivedMpdStatus = false;
 //        self.helper.setStatus(state);
     } else {
-        self.helper.setStatus(state);
         self.logger.info('[InterfaceMPD] new status\n' + self.helper.printStatus());
-
     }
     if (self.helper.setSong(state)) {  // song has changed
        self.helper.assignSongId(mpdServices.includes(state.service));   
@@ -1334,6 +1343,7 @@ InterfaceMPD.prototype.loadCommandHandlers = function () {
 //  self.commandHandlers[command.MOVE] = self.handleMove;
 //  self.commandHandlers[command.MOVEID] = self.handleMoveid;
 //  self.commandHandlers[command.NEXT] = self.handleNext;
+  self.commandHandlers[command.NOIDLE] = self.handleNoIdle;
 //  self.commandHandlers[command.NOTCOMMANDS] = self.handleNotcommands;
 //  self.commandHandlers[command.OUTPUTS] = self.handleOutputs;
 //  self.commandHandlers[command.PASSWORD] = self.handlePassword;
