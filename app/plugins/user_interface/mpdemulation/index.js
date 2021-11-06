@@ -257,12 +257,12 @@ InterfaceMPD.prototype.handleMpdResponse = function (data, termination) {
         } else {
             self.logger.info('[InterfaceMPD] received data for '+ cmd + ' command for internal use.'); 
             if (cmd === 'playlistinfo') {
+                self.receivedMpdPlaylist = true;
                 if (data) {
-                    self.receivedMpdPlaylist = true;
                     let q = libMpd.parseArrayMessage(data);
                     self.helper.copyQueue(q);
                     if (debug) { self.logger.info(JSON.stringify(q)); };
-               }
+                }
             } else if (cmd === 'status') {
                 self.receivedMpdStatus = true;
                 self.helper.copyStatus(libMpd.parseKeyValueMessage(data));
@@ -353,7 +353,7 @@ InterfaceMPD.prototype.mpdSocketReady = function () {
 
     if (self.serviceSocket) {
         if (self.serviceSocket.readyState == 'open') { 
-            if (debug) { self.logger.info('[InterfaceMPD] connection to real MPD is already open'); };
+//            if (debug) { self.logger.info('[InterfaceMPD] connection to real MPD is already open'); };
             defer.resolve(true);
             return defer.promise;
         }
@@ -1195,12 +1195,11 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
   } else {
     // pass state to the helper
     self.helper.setStatus(state);
-    if (mpdServices.includes(state.service)) {
+    if (mpdServices.includes(state.service) && self.receivedMpdStatus) {
         // get full mpd data from real mpd
+        self.receivedMpdStatus = false;
         self.logger.info('[InterfaceMPD] Requesting real MPD status');
         self.handleThroughRealMPD('status');
-        self.receivedMpdStatus = false;
-//        self.helper.setStatus(state);
     } else {
         self.logger.info('[InterfaceMPD] new status\n' + self.helper.printStatus());
     }
@@ -1208,14 +1207,16 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
        self.helper.assignSongId(mpdServices.includes(state.service));   
        // cheat for now: should get the actual queue!
 //       self.helper.setQueue([state]);
-       if (state.status === 'play') { 
+//       if (state.status === 'play') { 
             if (mpdServices.includes(state.service) && self.receivedMpdPlaylist) {
                 self.logger.info('[InterfaceMPD] Requesting real MPD playlist');
                 self.receivedMpdPlaylist = false;
                 // delay requesting playlist a bit 
+                // often there are a few updates bunched together, so by waiting a bit
+                // we avoid calling mpd every time...
                 setTimeout( () => { self.handleThroughRealMPD('playlistinfo'); }, 500); 
             }
-        };
+//        };
     };
     self.logger.info('[InterfaceMPD] new song\n' + self.helper.printSong());
 
@@ -1226,12 +1227,14 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
 //      // forward queue to helper
 //      self.helper.setQueue(queue);
 //    });
-    // broadcast state changed to all idlers
-    self.logger.info('[InterfaceMPD] broadcasting to ' + self.idles.length + ' idlers.');
-    self.idles.forEach(function (client) {
-      client.write('changed: playlist\nchanged: player\n' + okay_response);
-    });
-    self.idles = [];
+    // delay broadcasting changes a little bit, for the same reason as above
+    setTimeout( () => { 
+        // broadcast state changed to all idlers
+        self.logger.info('[InterfaceMPD] broadcasting to ' + self.idles.length + ' idlers.');
+        self.idles.forEach(function (client) {
+          client.write('changed: playlist\nchanged: player\n' + okay_response);
+        });
+        self.idles = [];}, 700);
   }
   // TODO q-stuff
 };
