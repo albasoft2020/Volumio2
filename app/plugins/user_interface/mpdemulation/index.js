@@ -253,31 +253,41 @@ InterfaceMPD.prototype.receiveMpdResponse = function (data) {
 InterfaceMPD.prototype.handleMpdResponse = function (data, termination) {
     let self = this;
     let cmd = self.mpdCmdQueue.shift();
+
     if (cmd) {
-        if (cmd === 'client') {
+        if (cmd.startsWith('client')) {
             let client = self.currentClients.shift();
-            if (debug) { self.logger.info('[InterfaceMPD] Sending data to client. Remaining clients ' + self.currentClients.length + '\n' + data + termination + '---'); };
-            if (client) client.write(data + termination + '\n'); 
+            if (debug) { self.logger.info('[InterfaceMPD] Sending data to client. Remaining clients ' + self.currentClients.length + '\n' + data + termination); };
+            if (client) {
+                try {
+                    client.write(data + termination + '\n'); 
+                } catch(e) { self.logger.error('[InterfaceMPD] Error returning mpd message to client: ' + e);}
+            } 
         } else if (termination.startsWith('ACK')) {
-            //var err = new Error(str);
-            self.logger.error('[InterfaceMPD]  mpd error: ' + str);
-            self.currentClients.shift();
+            self.logger.error('[InterfaceMPD]  mpd error: ' + termination);
         } else {
-            self.logger.info('[InterfaceMPD] received data for '+ cmd + ' command for internal use. Remaining Q: '+ self.mpdCmdQueue.length); 
-            if (debug) { self.logger.info('[InterfaceMPD] Q: ' + self.mpdCmdQueue); };
+            self.logger.info('[InterfaceMPD] received data for '+ cmd + ' command for internal use.'); 
             if (cmd === 'playlistinfo') {
                 if (data) {
-//                    let q = self.libMdp.parseArrayMessage(data);
-//                    if (debug) { self.logger.info('[InterfaceMPD] Playlist\n' + JSON.stringify(q)); };
-                    if (debug) { self.logger.info('[InterfaceMPD] Playlist data\n' + data); };
-                 }
+                    let q = libMpd.parseArrayMessage(data);
+                    self.helper.copyQueue(q);
+                    if (debug) { self.logger.info(JSON.stringify(q)); };
+               }
             } else if (cmd === 'status') {
-                self.helper.copyStatus(self.libMdp.parseKeyValueMessage(data));
+                self.helper.copyStatus(libMpd.parseKeyValueMessage(data));
+                self.logger.info('[InterfaceMPD] new status\n' + self.helper.printStatus());
             }
         } 
     } else {
-        this.logger.error('[InterfaceMPD]  mpd command queue error: empty queue');        
+        this.logger.error('[InterfaceMPD] mpd command queue error: empty queue');        
     }
+    if (debug) { 
+        if (self.mpdCmdQueue.length) {
+            self.logger.info('[InterfaceMPD] Q (' + self.mpdCmdQueue.length +  ' remaining): ' + self.mpdCmdQueue);
+        } else {
+            self.logger.info('[InterfaceMPD] Q empty');
+        } 
+    };
 };
 
 // Incoming message handler
@@ -313,7 +323,11 @@ InterfaceMPD.prototype.handleMessage = function (message, socket) {
   } else {
     var handler = self.commandHandlers[sCommand];
     if (handler) { 
-        self.logger.info('[InterfaceMPD] Received command "' + sCommand + '" with parameter ' + sParam);
+        if (sCommand === 'status') {
+//            self.logger.info('[InterfaceMPD] Received command "' + sCommand + '" with parameter ' + sParam);            
+        } else {
+            self.logger.info('[InterfaceMPD] Received command "' + sCommand + '" with parameter ' + sParam);
+        }
         handler.call(self, sCommand, sParam, socket); 
     } else { self.logger.info('[InterfaceMPD] no handler for command ' + sCommand); }
   }
@@ -329,7 +343,7 @@ InterfaceMPD.prototype.handleThroughRealMPD = function (sCommand, sParam, client
         // Add client to the list
         self.currentClients.push(client); 
         self.mpdDataHandler = self.mpdDataToClient;
-        self.mpdCmdQueue.push('client');
+        self.mpdCmdQueue.push('client:'+sCommand);
     } else {
         self.mpdCommand = sCommand;
         self.mpdCmdQueue.push(sCommand);
@@ -1203,19 +1217,25 @@ InterfaceMPD.prototype.pushState = function (state, socket) {
     // pass state to the helper
     if (mpdServices.includes(state.service)) {
         // get full mpd data from real mpd
-//        self.logger.info('[InterfaceMPD] Requesting real MPD status');
-//        self.handleThroughRealMPD('status');
+        self.logger.info('[InterfaceMPD] Requesting real MPD status');
+        self.handleThroughRealMPD('status');
+//        self.helper.setStatus(state);
     } else {
         self.helper.setStatus(state);
+        self.logger.info('[InterfaceMPD] new status\n' + self.helper.printStatus());
+
     }
     if (self.helper.setSong(state)) {  // song has changed
        self.helper.assignSongId(mpdServices.includes(state.service));   
        // cheat for now: should get the actual queue!
-       self.helper.setQueue([state]);
-       self.logger.info('[InterfaceMPD] Requesting real MPD playlist');
-       if (state.status === 'play') { self.handleThroughRealMPD('playlistinfo'); };
+//       self.helper.setQueue([state]);
+       if (state.status === 'play') { 
+            if (mpdServices.includes(state.service)) {
+                self.logger.info('[InterfaceMPD] Requesting real MPD playlist');
+                self.handleThroughRealMPD('playlistinfo'); 
+            }
+        };
     };
-    self.logger.info('[InterfaceMPD] new status\n' + self.helper.printStatus());
     self.logger.info('[InterfaceMPD] new song\n' + self.helper.printSong());
 
     // for now also just get the queue

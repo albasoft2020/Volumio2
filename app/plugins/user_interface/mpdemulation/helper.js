@@ -256,7 +256,7 @@ module.exports = {
         if (status.state === 'play') {// playing, so update elapsed time
             let elapsed = (Date.now() - songStartTime)/1000;
             status.elapsed = elapsed; // time elapsed
-            status.time = Math.round(elapsed) + ':' + status.duration; // song time
+            status.time = Math.round(elapsed) + ':' + status.time.split(':')[1]; // song time
         }
     return printArray(status);
   },
@@ -388,7 +388,18 @@ module.exports = {
 
     // Return a resolved empty promise to represent completion
     return libQ.resolve();
+  },
+  
+      // Set the queue by copying mpd queue
+  copyQueue: function (mpdQ) {
+    // copy the whole state object (assumed to come straight from mpd!)
+    //queue = Object.assign({}, mpdQ);
+    queue = mpdQ;
+    // Return a resolved empty promise to represent completion
+    return libQ.resolve();
   }
+ 
+
 
 // END OF SETTERS
 };
