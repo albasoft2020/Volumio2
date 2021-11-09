@@ -755,11 +755,27 @@ InterfaceMPD.prototype.handlePlaylistfind = function (sCommand, sParam, client) 
 
 // Handler for command: PLAYLISTID
 InterfaceMPD.prototype.handlePlaylistid = function (sCommand, sParam, client) {
-  // Temporary Disabled and HardCoded
-  client.write('ACK [50@0] {playlistid} No such song\n');
-
-  // Respond with default 'OK'
-  // client.write(okay_response);
+    var self = this;
+    // assume the local queue info is up to date
+    // fetch MPD output from helper
+    let resp = '';
+    if (sParam){
+        //remove double-quotes
+          if (sParam.charAt(0) === '"' && sParam.charAt(sParam.length -1) === '"')
+          {
+              sParam = sParam.substr(1,sParam.length -2);
+          }
+          resp = self.helper.printPlaylistID(sParam);
+          if (resp){
+              resp += okay_response;
+          } else { // song not found in playlist
+              //resp = 'ACK [50@0] (' + sCommand + ') song doesn\'t exist: "' + sParam + '"\n';
+              resp = okay_response;
+          }
+      } else {  // no parameters: print the whole playlist
+          self.logger.info('[InterfaceMPD] PlaylistID did not have ID parameter specified1');
+      }
+      client.write(resp);
 };
 
 // Handler for command: PLAYLISTINFO
@@ -767,35 +783,8 @@ InterfaceMPD.prototype.handlePlaylistinfo = function (sCommand, sParam, client) 
     var self = this;
     var timeStart = Date.now();
 
-  // Fetch queue from CommandRouter
-//  self.logStart('Client requests Volumio queue')
-//    .then(libFast.bind(self.commandRouter.volumioGetQueue, self.commandRouter))
-//    .then(function (queue) {
-//      self.logger.info('[InterfaceMPD] Received queue: \n'+ JSON.stringify(queue) + '---');
-//      // forward queue to helper
-//      self.helper.setQueue(queue);
-//    }).then(function () {
-//      // fetch MPD output from helper
-//      let resp = '';
-//      if (sParam){
-//          resp = self.helper.printPlaylist(sParam);
-//          if (resp){
-//              resp += okay_response;
-//          } else { // song not found in playlist
-//              resp = 'ACK [50@0] (' + sCommand + ') song doesn\'t exist: "' + sParam + '"\n';
-//          }
-//      } else {
-//          resp = self.helper.printPlaylist() + okay_response;
-//      }
-//      self.logger.info('[InterfaceMPD] Sending playlist response: \n'+ resp + '---');
-//      client.write(resp);
-//    })
-//    .fail(libFast.bind(self.logger.error, self.commandRouter))
-//    .done(function () {
-//      return self.logDone(timeStart);
-//    });
-      // assume the local queue info is up to date
-      // fetch MPD output from helper
+    // assume the local queue info is up to date
+    // fetch MPD output from helper
     let resp = '';
     if (sParam){
         //remove double-quotes
@@ -1318,7 +1307,7 @@ InterfaceMPD.prototype.loadCommandHandlers = function () {
 //  self.commandHandlers[command.PLAYLISTCLEAR] = self.handlePlaylistclear;
 //  self.commandHandlers[command.PLAYLISTDELETE] = self.handlePlaylistdelete;
 //  self.commandHandlers[command.PLAYLISTFIND] = self.handlePlaylistfind;
-//  self.commandHandlers[command.PLAYLISTID] = self.handlePlaylistid;
+  self.commandHandlers[command.PLAYLISTID] = self.handlePlaylistid;
   self.commandHandlers[command.PLAYLISTINFO] = self.handlePlaylistinfo;
 //  self.commandHandlers[command.PLAYLISTMOVE] = self.handlePlaylistmove;
 //  self.commandHandlers[command.PLAYLISTSEARCH] = self.handlePlaylistsearch;

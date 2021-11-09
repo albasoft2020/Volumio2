@@ -242,6 +242,16 @@ module.exports = {
     return output;
   },
 
+  // Give MPD output for song by ID
+  printPlaylistID: function (id) {
+    const track = queue.find(song => song.ID == id);
+    var output = '';
+    if (track != undefined) { 
+        output = printArray(track);
+    }
+    return output;
+  },
+  
   // Give MPD output of status
   printStatus: function (state) {
     if (state) {
